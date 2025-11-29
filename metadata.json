@@ -1,0 +1,7 @@
+{
+  "name": "VibeCanvas",
+  "description": "Generate and edit images with VibeCanvas using various AI models, manage your creations in a local library, and streamline your workflow with customizable templates. All processing is done on the client-side.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
