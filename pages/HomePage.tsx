@@ -288,16 +288,55 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
         clearResults();
     };
 
+    // Clear results when route changes (user clicks tabs)
+    useEffect(() => {
+        // Only clear if we have results and user navigates
+        return () => {
+            const { results, error, isGenerating } = useGenerationStore.getState();
+            if ((results.length > 0 || error) && !isGenerating) {
+                clearResults();
+            }
+        };
+    }, [location.pathname]);
+
     const hasResults = results.length > 0;
     const showHero = isGenerating || hasResults || error;
+
+    // Handle clicking on the backdrop to close results
+    const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        // Only close if clicking directly on the backdrop, not on children
+        if (e.target === e.currentTarget && hasResults && !isGenerating) {
+            handleCloseResults();
+        }
+    };
+
+    // Handle Escape key to close results
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && hasResults && !isGenerating) {
+                handleCloseResults();
+            }
+        };
+        
+        if (hasResults) {
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [hasResults, isGenerating]);
 
     const currentModeRecords = imageRecords.filter(r => (r.mediaType || 'image') === mode);
     const starredRecords = currentModeRecords.filter(r => r.meta?.isStarred);
     const recentRecords = currentModeRecords.filter(r => !r.meta?.isStarred).slice(0, 20);
     
-    const availableAspectRatios = mode === 'video'
-        ? MODEL_DETAILS[modelId]?.supportedAspectRatios || []
-        : ASPECT_RATIOS;
+    const availableAspectRatios = MODEL_DETAILS[modelId]?.supportedAspectRatios || ASPECT_RATIOS;
+    const availableResolutions = MODEL_DETAILS[modelId]?.supportedResolutions || RESOLUTIONS;
+
+    // Auto-select valid resolution if current one is not supported
+    useEffect(() => {
+        if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
+            setResolution(availableResolutions[0]);
+        }
+    }, [modelId, resolution, availableResolutions, setResolution]);
 
     const isSora = modelId === 'sora-2-video';
     
@@ -314,20 +353,20 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
                     
                     {/* MODE A: Hero/Focus View (Active Generation or Results) */}
                     {showHero && (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-4 sm:p-6 animate-fade-in">
+                        <div 
+                            className="w-full h-full flex flex-col items-center justify-center p-4 sm:p-6 animate-fade-in cursor-pointer"
+                            onClick={handleBackdropClick}
+                        >
                             
-                            {/* Top Bar for Hero View */}
+                            {/* Hint to click away - only show when results are ready */}
                             {!isGenerating && hasResults && (
-                                <div className="absolute top-4 right-4 z-10">
-                                    <button onClick={handleCloseResults} className="bg-slate-800/80 text-white px-4 py-2 rounded-full hover:bg-slate-700 transition-colors flex items-center gap-2 border border-white/10 backdrop-blur-md shadow-lg">
-                                        <CloseIcon />
-                                        <span className="text-sm font-medium">Done</span>
-                                    </button>
+                                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-slate-500 text-xs flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/5">
+                                    <span>Click anywhere or press Esc to close</span>
                                 </div>
                             )}
 
                             {isGenerating && (
-                                <div className="text-center z-10">
+                                <div className="text-center z-10 cursor-default" onClick={(e) => e.stopPropagation()}>
                                     <div className="w-24 h-24 border-4 border-dashed rounded-full animate-spin border-neon-cyan mx-auto shadow-[0_0_30px_rgba(57,175,255,0.3)]"></div>
                                     <p className="mt-8 text-lg font-medium animate-pulse text-neon-cyan">
                                         {statusMessage || (mode === 'video' ? 'Rendering video...' : 'Dreaming up your visual...')}
@@ -348,10 +387,13 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
                             )}
 
                             {!isGenerating && error && (
-                                <div className={cn(
-                                    "text-center p-8 bg-slate-800/50 rounded-2xl border max-w-md shadow-2xl backdrop-blur-xl",
-                                    error === 'Generation cancelled.' ? "border-slate-700" : "border-red-500/20 text-red-400"
-                                )}>
+                                <div 
+                                    className={cn(
+                                        "text-center p-8 bg-slate-800/50 rounded-2xl border max-w-md shadow-2xl backdrop-blur-xl cursor-default",
+                                        error === 'Generation cancelled.' ? "border-slate-700" : "border-red-500/20 text-red-400"
+                                    )}
+                                    onClick={(e) => e.stopPropagation()}
+                                >
                                     <div className="mb-4 flex justify-center"><CloseIcon /></div>
                                     <p className="font-bold text-lg mb-2">
                                         {error === 'Generation cancelled.' ? 'Generation Cancelled' : 'Generation Failed'}
@@ -362,7 +404,10 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
                             )}
 
                             {!isGenerating && !error && results.length > 0 && (
-                                <div className="w-full h-full max-w-6xl flex flex-col items-center justify-center gap-6">
+                                <div 
+                                    className="w-full h-full max-w-6xl flex flex-col items-center justify-center gap-6 cursor-default"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
                                     {/* Handle Multiple Results (Comparison) */}
                                     <div className={cn(
                                         "relative w-full flex-grow min-h-0",
@@ -570,13 +615,28 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
                                     </select>
                                 </>
                             ) : (
-                                <select 
-                                    value={aspectRatio} 
-                                    onChange={(e) => setAspectRatio(e.target.value as any)}
-                                    className="bg-transparent text-xs text-gray-300 border border-white/10 rounded-lg px-2 py-2 focus:outline-none focus:border-neon-cyan"
-                                >
-                                    {availableAspectRatios.map(ar => <option key={ar} value={ar} className="bg-slate-900">{ar}</option>)}
-                                </select>
+                                <>
+                                    <select 
+                                        value={aspectRatio} 
+                                        onChange={(e) => setAspectRatio(e.target.value as any)}
+                                        className="bg-transparent text-xs text-gray-300 border border-white/10 rounded-lg px-2 py-2 focus:outline-none focus:border-neon-cyan"
+                                    >
+                                        {availableAspectRatios.map(ar => <option key={ar} value={ar} className="bg-slate-900">{ar}</option>)}
+                                    </select>
+                                    {availableResolutions.length > 1 && (
+                                        <select 
+                                            value={resolution} 
+                                            onChange={(e) => setResolution(e.target.value as any)}
+                                            className="bg-transparent text-xs text-gray-300 border border-white/10 rounded-lg px-2 py-2 focus:outline-none focus:border-neon-cyan max-w-[80px]"
+                                        >
+                                            {availableResolutions.map(res => (
+                                                <option key={res} value={res} className="bg-slate-900">
+                                                    {RESOLUTION_LABELS[res] || res}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </>
                             )}
                             
                             <button 
@@ -694,14 +754,30 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
                                         </select>
                                     </>
                                 ) : (
-                                    <select 
-                                        value={aspectRatio} 
-                                        onChange={(e) => setAspectRatio(e.target.value as any)}
-                                        className="bg-slate-800/50 text-xs text-gray-300 border border-white/10 rounded-lg px-2 py-2 focus:outline-none focus:border-neon-cyan hover:bg-slate-800 transition-colors"
-                                        title="Aspect Ratio"
-                                    >
-                                        {availableAspectRatios.map(ar => <option key={ar} value={ar} className="bg-slate-900">{ar}</option>)}
-                                    </select>
+                                    <>
+                                        <select 
+                                            value={aspectRatio} 
+                                            onChange={(e) => setAspectRatio(e.target.value as any)}
+                                            className="bg-slate-800/50 text-xs text-gray-300 border border-white/10 rounded-lg px-2 py-2 focus:outline-none focus:border-neon-cyan hover:bg-slate-800 transition-colors"
+                                            title="Aspect Ratio"
+                                        >
+                                            {availableAspectRatios.map(ar => <option key={ar} value={ar} className="bg-slate-900">{ar}</option>)}
+                                        </select>
+                                        {availableResolutions.length > 1 && (
+                                            <select 
+                                                value={resolution} 
+                                                onChange={(e) => setResolution(e.target.value as any)}
+                                                className="bg-slate-800/50 text-xs text-gray-300 border border-white/10 rounded-lg px-2 py-2 focus:outline-none focus:border-neon-cyan hover:bg-slate-800 transition-colors"
+                                                title="Resolution"
+                                            >
+                                                {availableResolutions.map(res => (
+                                                    <option key={res} value={res} className="bg-slate-900">
+                                                        {RESOLUTION_LABELS[res] || res}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </>
                                 )}
 
                                 <button 
@@ -903,7 +979,7 @@ const GalleryItem: React.FC<{ record: ImageRecord, onClick: () => void, onRemix:
                         {MODEL_DETAILS[record.model]?.name || 'Model'}
                     </span>
                     
-                    <div className="flex items-center gap-1">
+                    <div className="hidden md:flex items-center gap-1">
                         <button 
                             onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
                             className={cn(

@@ -5,8 +5,8 @@ export type ModelId =
   | 'veo-3.1-generate-preview'
   | 'sora-2-video';
 
-export type AspectRatio = "1:1" | "3:2" | "2:3" | "16:9" | "9:16" | "4:5" | "21:9";
-export type Resolution = "512" | "768" | "1024" | "1536" | "2048";
+export type AspectRatio = "1:1" | "3:2" | "2:3" | "16:9" | "9:16" | "4:5" | "5:4" | "3:4" | "4:3" | "21:9";
+export type Resolution = "512" | "768" | "1024" | "1536" | "2048" | "1K" | "2K" | "4K";
 
 export interface GenParams {
   prompt: string;

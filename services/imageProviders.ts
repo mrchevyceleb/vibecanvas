@@ -93,28 +93,15 @@ const geminiProImageProvider: ImageProvider = {
                 });
             }
             
-            parts.push({ text: params.prompt });
-
-            let imageSize: "1K" | "2K" = "1K";
-            if (['1536', '2048'].includes(params.resolution)) {
-                imageSize = "2K";
-            }
+            let imageSize: "1K" | "2K" | "4K" = "1K";
+            if (params.resolution === "2K" || params.resolution === "1536") imageSize = "2K";
+            if (params.resolution === "4K" || params.resolution === "2048") imageSize = "4K";
             
-            let supportedAspectRatio = params.aspectRatio;
-            const ratioMap: Record<string, string> = {
-                '3:2': '4:3',
-                '2:3': '3:4',
-                '4:5': '3:4',
-                '21:9': '16:9'
-            };
-            if (params.aspectRatio in ratioMap) {
-                supportedAspectRatio = ratioMap[params.aspectRatio] as AspectRatio;
-            }
+            // Gemini 3 Pro supports all defined aspect ratios natively
+            const supportedAspectRatio = params.aspectRatio;
 
-            const allowedRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
-            if (!allowedRatios.includes(supportedAspectRatio)) {
-                supportedAspectRatio = '1:1';
-            }
+            // Append aspect ratio to prompt to ensure it is respected (Workaround for API consistency)
+            parts.push({ text: `${params.prompt} (Aspect Ratio: ${supportedAspectRatio})` });
 
             try {
                 const response = await ai.models.generateContent({
@@ -192,11 +179,17 @@ const openaiProvider: ImageProvider = {
         const { setGenerationStatus } = useGenerationStore.getState();
         setGenerationStatus('Requesting image from OpenAI...');
         
+        // Map resolution to compatible format for OpenAI Edge Function
+        let safeResolution = params.resolution;
+        if (safeResolution === "1K" || safeResolution === "2K" || safeResolution === "4K") {
+            safeResolution = "1024";
+        }
+
         const { data, error } = await supabase.functions.invoke('open-ai-image', {
             body: { 
                 prompt: params.prompt,
                 aspectRatio: params.aspectRatio,
-                resolution: params.resolution
+                resolution: safeResolution
             },
         });
 
