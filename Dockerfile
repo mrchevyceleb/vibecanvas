@@ -13,12 +13,11 @@ RUN npm ci
 COPY . .
 
 # Build args for environment variables (passed at build time)
-ARG GEMINI_API_KEY
+# Note: API keys are now handled server-side via Supabase Edge Functions
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 
 # Set environment variables for build
-ENV GEMINI_API_KEY=$GEMINI_API_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 

@@ -14,11 +14,10 @@
 
 steps:
   # Build the Docker image
+  # Note: API keys are handled server-side via Supabase Edge Functions
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
-      - '--build-arg'
-      - 'GEMINI_API_KEY=${_GEMINI_API_KEY}'
       - '-t'
       - 'gcr.io/$PROJECT_ID/vibecanvas:$COMMIT_SHA'
       - '-t'
@@ -66,7 +65,6 @@ steps:
 # Substitution variables (can be overridden at build time)
 substitutions:
   _REGION: 'us-central1'
-  _GEMINI_API_KEY: ''
 
 # Build options
 options:

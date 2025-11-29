@@ -4,12 +4,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { toast } from '../components/ui/Toaster';
 import { ImageRecord } from '../types';
-import { GoogleGenAI } from '@google/genai';
 import { blobToBase64 } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../supabase/client';
 import { useImageLoader } from '../hooks/useImageLoader';
-import { ensureApiKeySelected } from '../services/imageProviders';
 import { Lightbox } from '../components/Lightbox';
 
 const MAGICAL_PHRASES = [
@@ -59,108 +57,85 @@ const EditorPage: React.FC = () => {
         const randomPhrase = MAGICAL_PHRASES[Math.floor(Math.random() * MAGICAL_PHRASES.length)];
         setProcessingStatus(randomPhrase);
 
-        const executeEdit = async (retry: boolean) => {
-            try {
-                // Check for API key selection requirement for Gemini 3 Pro
-                await ensureApiKeySelected();
-    
-                if (!process.env.API_KEY && !(window as any).aistudio) {
-                    throw new Error("API_KEY environment variable not set.");
-                }
-    
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
-                
-                const { data: originalBlob, error: downloadError } = await supabase.storage.from('images').download(originalRecord.storage_path);
-                if (downloadError || !originalBlob) {
-                    throw new Error('Original image blob not found');
-                }
-                const base64Data = await blobToBase64(originalBlob);
-    
-                const parts = [
-                    { inlineData: { data: base64Data, mimeType: originalBlob.type || 'image/png' } },
-                    { text: editPrompt },
-                ];
-                
-                // Preserve original aspect ratio and resolution from the source image
-                const originalAspectRatio = originalRecord.params?.aspectRatio || "1:1";
-                const originalResolution = originalRecord.params?.resolution || "1K";
-                // Map old resolution formats to new format if needed
-                const imageSize = ["1K", "2K", "4K"].includes(originalResolution) 
-                    ? originalResolution as "1K" | "2K" | "4K"
-                    : "1K";
-                
-                // Use new model for editing with proper config
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3-pro-image-preview',
-                    contents: parts,
-                    config: { 
-                        responseModalities: ['Text', 'Image'],
-                        imageConfig: {
-                             aspectRatio: originalAspectRatio,
-                             imageSize: imageSize
-                        }
-                    } as any,
-                });
-    
-                let editedBlob: Blob | null = null;
-                if (response.candidates?.[0]?.content.parts) {
-                    for (const part of response.candidates[0].content.parts) {
-                        if (part.inlineData) {
-                            const base64ImageBytes: string = part.inlineData.data;
-                            editedBlob = await (await fetch(`data:image/png;base64,${base64ImageBytes}`)).blob();
-                            break;
-                        }
+        try {
+            // Download original image and convert to base64
+            const { data: originalBlob, error: downloadError } = await supabase.storage.from('images').download(originalRecord.storage_path);
+            if (downloadError || !originalBlob) {
+                throw new Error('Original image blob not found');
+            }
+            const base64Data = await blobToBase64(originalBlob);
+
+            // Preserve original aspect ratio and resolution from the source image
+            const originalAspectRatio = originalRecord.params?.aspectRatio || "1:1";
+            const originalResolution = originalRecord.params?.resolution || "1K";
+            // Map old resolution formats to new format if needed
+            const imageSize = ["1K", "2K", "4K"].includes(originalResolution) 
+                ? originalResolution as "1K" | "2K" | "4K"
+                : "1K";
+
+            // Call edge function for editing
+            const { data, error } = await supabase.functions.invoke('gemini-image', {
+                body: { 
+                    prompt: editPrompt,
+                    aspectRatio: originalAspectRatio,
+                    imageSize: imageSize,
+                    initImageBase64: base64Data,
+                    initImageMimeType: originalBlob.type || 'image/png',
+                    isEdit: true,
+                },
+            });
+
+            if (error) {
+                console.error("Gemini Edge Function Error:", error);
+                let errorMessage = error.message;
+                if (error && typeof error === 'object' && 'context' in error) {
+                    const context = (error as any).context;
+                    if (context instanceof Response) {
+                        try {
+                            const errorBody = await context.json();
+                            if (errorBody?.error) errorMessage = errorBody.error;
+                        } catch (e) {}
                     }
                 }
-    
-                if (!editedBlob) {
-                    throw new Error('Editing failed to produce an image. It may have been blocked for safety reasons.');
-                }
-    
-                const newRecord = await addImage({
-                    model: 'gemini-3-pro-image-preview',
-                    params: { ...originalRecord.params, prompt: editPrompt },
-                    promptTextAtGen: `Edited: ${originalRecord.promptTextAtGen}`,
-                    sourceType: 'edit',
-                    meta: { ...originalRecord.meta, parentId: originalRecord.id },
-                    folder_id: originalRecord.folder_id,
-                    mediaType: 'image',
-                }, editedBlob, user.id);
-                
-                if (newRecord) {
-                    setGeneratedRecord(newRecord);
-                    toast('Transformation complete!', 'success');
-                } else {
-                    throw new Error("Failed to save the transformed image.");
-                }
-    
-            } catch (error: any) {
-                const msg = (error.message || error.toString()).toLowerCase();
-                const isKeyError = msg.includes("api key") || msg.includes("400") || msg.includes("requested entity was not found");
-
-                if (retry && (window as any).aistudio && isKeyError) {
-                     console.warn("API Key invalid or expired. Prompting re-selection.");
-                     toast("Invalid API Key. Please select a valid Paid API key.", "error");
-                     await (window as any).aistudio.openSelectKey();
-                     return executeEdit(false);
-                }
-                
-                console.error('Editing failed:', error);
-                const displayMsg = isKeyError 
-                    ? "API Key not valid. Please ensure you have selected a valid API key associated with a billing project."
-                    : (error.message || 'An error occurred during editing.');
-                    
-                toast(displayMsg, 'error');
-            } finally {
-                if (!retry) setProcessingStatus(null);
+                throw new Error(errorMessage);
             }
-        };
-        
-        // Start execution
-        // Note: We don't await here inside handleSaveChanges in a way that blocks UI updates, 
-        // but executeEdit handles the loading state internally via setProcessingStatus
-        await executeEdit(true);
-        setProcessingStatus(null);
+
+            if (!data?.success) {
+                throw new Error(data?.error || "Editing failed");
+            }
+
+            if (!data.images || data.images.length === 0) {
+                throw new Error('Editing failed to produce an image. It may have been blocked for safety reasons.');
+            }
+
+            // Convert first image to blob
+            const img = data.images[0];
+            const dataUrl = `data:${img.mimeType || 'image/png'};base64,${img.b64_json}`;
+            const editedBlob = await (await fetch(dataUrl)).blob();
+
+            const newRecord = await addImage({
+                model: 'gemini-3-pro-image-preview',
+                params: { ...originalRecord.params, prompt: editPrompt },
+                promptTextAtGen: `Edited: ${originalRecord.promptTextAtGen}`,
+                sourceType: 'edit',
+                meta: { ...originalRecord.meta, parentId: originalRecord.id },
+                folder_id: originalRecord.folder_id,
+                mediaType: 'image',
+            }, editedBlob, user.id);
+            
+            if (newRecord) {
+                setGeneratedRecord(newRecord);
+                toast('Transformation complete!', 'success');
+            } else {
+                throw new Error("Failed to save the transformed image.");
+            }
+
+        } catch (error: any) {
+            console.error('Editing failed:', error);
+            toast(error.message || 'An error occurred during editing.', 'error');
+        } finally {
+            setProcessingStatus(null);
+        }
     };
 
     const handleCloseLightbox = () => {

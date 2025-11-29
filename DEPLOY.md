@@ -12,13 +12,14 @@
 
 ## Environment Variables
 
-The app requires the following environment variables at **build time**:
+**All API keys are now handled server-side via Supabase Edge Functions.** No secrets are required at build time!
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GEMINI_API_KEY` | Google AI Studio API key for Nano Banana Pro | Yes |
-| `VITE_SUPABASE_URL` | Supabase project URL (already hardcoded) | No |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon key (already hardcoded) | No |
+| Variable | Description | Where Configured |
+|----------|-------------|------------------|
+| `GOOGLE_API_KEY` | Google AI Studio API key | Supabase Edge Function secrets |
+| `OPENAI_API_KEY` | OpenAI API key | Supabase Edge Function secrets |
+| `SUPABASE_URL` | Supabase project URL | Supabase Edge Function (auto) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service key | Supabase Edge Function secrets |
 
 ## Quick Deploy (Manual)
 
@@ -28,32 +29,29 @@ The app requires the following environment variables at **build time**:
 # Set your project
 gcloud config set project YOUR_PROJECT_ID
 
-# Build and deploy in one command
+# Build and deploy in one command (no secrets needed!)
 gcloud run deploy vibecanvas \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
   --port 8080 \
-  --memory 512Mi \
-  --set-build-env-vars="GEMINI_API_KEY=your-api-key-here"
+  --memory 512Mi
 ```
 
 ### Option 2: Using Cloud Build
 
 ```bash
-# Submit build with substitutions
+# Submit build
 gcloud builds submit \
   --config cloudbuild.yaml \
-  --substitutions=_GEMINI_API_KEY="your-api-key-here",_REGION="us-central1"
+  --substitutions=_REGION="us-central1"
 ```
 
 ### Option 3: Build Docker locally first
 
 ```bash
-# Build the image
-docker build \
-  --build-arg GEMINI_API_KEY="your-api-key-here" \
-  -t gcr.io/YOUR_PROJECT_ID/vibecanvas:latest .
+# Build the image (no secrets needed!)
+docker build -t gcr.io/YOUR_PROJECT_ID/vibecanvas:latest .
 
 # Push to Container Registry
 docker push gcr.io/YOUR_PROJECT_ID/vibecanvas:latest
@@ -127,9 +125,9 @@ availableSecrets:
       env: 'GEMINI_API_KEY'
 ```
 
-## Supabase Edge Functions
+## Supabase Edge Functions (Required)
 
-The Veo and OpenAI providers use Supabase Edge Functions. These are deployed separately:
+**All AI API calls go through Supabase Edge Functions** to keep API keys secure. Deploy these before using the app:
 
 ```bash
 # Install Supabase CLI
@@ -141,14 +139,26 @@ supabase login
 # Link to your project
 supabase link --project-ref xcjqilfhlwbykckzdzry
 
-# Deploy functions
-supabase functions deploy veo-video
-supabase functions deploy open-ai-image
+# Deploy all edge functions
+supabase functions deploy gemini-image    # Nano Banana Pro (image generation)
+supabase functions deploy open-ai-image   # GPT-Image-1
+supabase functions deploy veo-video       # Veo 3.1 (video generation)
+# Note: sora-video is already deployed
 
 # Set secrets for edge functions
 supabase secrets set GOOGLE_API_KEY=your-google-api-key
 supabase secrets set OPENAI_API_KEY=your-openai-api-key
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
+
+### Edge Function Architecture
+
+| Function | Provider | Purpose |
+|----------|----------|---------|
+| `gemini-image` | Google | Nano Banana Pro image generation & editing |
+| `open-ai-image` | OpenAI | GPT-Image-1 generation |
+| `veo-video` | Google | Veo 3.1 video generation |
+| `sora-video` | OpenAI | Sora 2 video generation |
 
 ## Troubleshooting
 

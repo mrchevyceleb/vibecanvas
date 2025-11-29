@@ -1,28 +1,14 @@
 
 import { ModelId, ImageProvider, GenParams, GenerateResult, AspectRatio } from '../types';
-import { GoogleGenAI } from '@google/genai';
 import { blobToBase64 } from '../lib/utils';
 import { supabase, supabaseAnonKey, supabaseUrl } from '../supabase/client';
 import { useGenerationStore } from '../store/useGenerationStore';
 import { toast } from '../components/ui/Toaster';
 
-export const ensureApiKeySelected = async () => {
-     if ((window as any).aistudio) {
-         const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-         if (!hasKey) {
-             const success = await (window as any).aistudio.openSelectKey();
-             if (!success) {
-                 throw new Error("API Key selection is required.");
-             }
-         }
-    }
-}
-
 const geminiProImageProvider: ImageProvider = {
     id: 'gemini-3-pro-image-preview',
     name: 'Nano Banana Pro',
-    // Allow if we have an env key OR if we are in AI Studio where we can select one
-    isConfigured: () => !!process.env.API_KEY || !!(window as any).aistudio,
+    isConfigured: () => true, // Edge function handles API key
     supports: {
         img2img: true,
         negativePrompt: false,
@@ -31,108 +17,81 @@ const geminiProImageProvider: ImageProvider = {
         seed: false,
     },
     async generate(params: GenParams): Promise<GenerateResult> {
-        const generateWithRetry = async (retry: boolean): Promise<GenerateResult> => {
-            await ensureApiKeySelected();
+        const { setGenerationStatus } = useGenerationStore.getState();
+        setGenerationStatus('Generating image with Nano Banana Pro...');
 
-            if (!process.env.API_KEY && !(window as any).aistudio) {
-                throw new Error('Gemini provider is not configured. Ensure API_KEY is available in environment.');
-            }
-
-            // Use the key if available. If in AI Studio, ensureApiKeySelected should have handled it.
-            // If process.env.API_KEY is still missing here in a non-AI Studio env, it will fail below.
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
-            
-            // Build contents - either just prompt or image + prompt for img2img
-            let contents: any[] = [];
-            
-            // Add user-provided init image first, if it exists
-            if (params.initImageStoragePath) {
-                const { data: imageBlob, error } = await supabase.storage.from('images').download(params.initImageStoragePath);
-                if (error || !imageBlob) {
-                    throw new Error('Initial image not found in storage.');
-                }
-                const base64Data = await blobToBase64(imageBlob);
-                contents.push({
-                    inlineData: {
-                        data: base64Data,
-                        mimeType: imageBlob.type || 'image/png',
-                    },
-                });
-            }
-            
-            let imageSize: "1K" | "2K" | "4K" = "1K";
-            if (params.resolution === "2K" || params.resolution === "1536") imageSize = "2K";
-            if (params.resolution === "4K" || params.resolution === "2048") imageSize = "4K";
-            
-            const aspectRatio = params.aspectRatio;
-
-            // WORKAROUND: Append aspect ratio to end of prompt (user-tested fix)
-            const finalPrompt = `${params.prompt} ${aspectRatio}`;
-            
-            contents.push({ text: finalPrompt });
-
-            console.log('[Gemini 3 Pro] Final prompt:', finalPrompt);
-
-            try {
-                // Call API using exact structure from Gemini JavaScript documentation
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3-pro-image-preview',
-                    contents: contents,
-                    config: {
-                        responseModalities: ['Text', 'Image'],
-                        imageConfig: {
-                            aspectRatio: aspectRatio,
-                            imageSize: imageSize,
-                        },
-                    } as any,
-                });
-
-                if (!useGenerationStore.getState().isGenerating) throw new Error('Generation cancelled.');
-
-                const images: { blob: Blob; meta?: any }[] = [];
-                if (response.candidates && response.candidates.length > 0) {
-                    for (const part of response.candidates[0].content.parts) {
-                        if (part.inlineData) {
-                            const base64ImageBytes: string = part.inlineData.data;
-                            const blob = await (await fetch(`data:image/png;base64,${base64ImageBytes}`)).blob();
-                            images.push({ blob, meta: { modelUsed: 'gemini-3-pro-image-preview' } });
-                        }
-                    }
-                }
-                
-                if (images.length === 0) {
-                    const blockReason = response.candidates?.[0]?.finishReason;
-                    if (blockReason === 'SAFETY' || blockReason === 'OTHER') {
-                        throw new Error(`Image generation was blocked due to: ${blockReason}. Prompt may have violated safety policies.`);
-                    }
-                    throw new Error('No image was generated. The model may not have returned an image.');
-                }
-
-                return { images };
-            } catch (error: any) {
-                console.error("Gemini API Error:", error);
-                const msg = error.message?.toLowerCase() || '';
-                
-                // Only treat as key error if explicit. 
-                // Generic 400s (INVALID_ARGUMENT) should bubble up with their specific message.
-                const isKeyError = msg.includes("api key") || msg.includes("requested entity was not found") || msg.includes("403");
-                
-                if (retry && (window as any).aistudio && isKeyError) {
-                     console.warn("API Key invalid or expired. Prompting re-selection.");
-                     toast("Invalid API Key. Please select a valid Paid API key.", "error");
-                     await (window as any).aistudio.openSelectKey();
-                     return generateWithRetry(false);
-                }
-                
-                if (isKeyError) {
-                    throw new Error("API Key not valid. Please ensure you have selected a valid API key associated with a billing project.");
-                }
-                
-                throw error;
-            }
-        };
+        // Prepare init image if provided
+        let initImageBase64: string | undefined;
+        let initImageMimeType: string | undefined;
         
-        return generateWithRetry(true);
+        if (params.initImageStoragePath) {
+            const { data: imageBlob, error } = await supabase.storage.from('images').download(params.initImageStoragePath);
+            if (imageBlob && !error) {
+                initImageBase64 = await blobToBase64(imageBlob);
+                initImageMimeType = imageBlob.type || 'image/png';
+            } else {
+                console.warn("Failed to load init image:", error);
+            }
+        }
+        
+        // Map resolution to imageSize
+        let imageSize: "1K" | "2K" | "4K" = "1K";
+        if (params.resolution === "2K" || params.resolution === "1536") imageSize = "2K";
+        if (params.resolution === "4K" || params.resolution === "2048") imageSize = "4K";
+
+        // Call edge function
+        const { data, error } = await supabase.functions.invoke('gemini-image', {
+            body: { 
+                prompt: params.prompt,
+                aspectRatio: params.aspectRatio,
+                imageSize: imageSize,
+                initImageBase64,
+                initImageMimeType,
+            },
+        });
+
+        if (error) {
+            console.error("Gemini Edge Function Error:", error);
+            let errorMessage = error.message;
+
+            // Try to extract detailed error from response
+            if (error && typeof error === 'object' && 'context' in error) {
+                const context = (error as any).context;
+                if (context instanceof Response) {
+                    try {
+                        const errorBody = await context.json();
+                        if (errorBody?.error) errorMessage = errorBody.error;
+                    } catch (e) {}
+                }
+            }
+            
+            throw new Error(`Nano Banana Pro Error: ${errorMessage}`);
+        }
+
+        if (!data?.success) {
+            throw new Error(data?.error || "Image generation failed");
+        }
+
+        if (!useGenerationStore.getState().isGenerating) {
+            throw new Error('Generation cancelled.');
+        }
+
+        // Convert base64 images to blobs
+        const images: { blob: Blob; meta?: any }[] = [];
+        
+        if (data.images && Array.isArray(data.images)) {
+            for (const img of data.images) {
+                const dataUrl = `data:${img.mimeType || 'image/png'};base64,${img.b64_json}`;
+                const blob = await (await fetch(dataUrl)).blob();
+                images.push({ blob, meta: { modelUsed: 'gemini-3-pro-image-preview' } });
+            }
+        }
+
+        if (images.length === 0) {
+            throw new Error('No images returned from generation service.');
+        }
+
+        return { images };
     },
 };
 
