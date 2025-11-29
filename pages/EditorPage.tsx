@@ -81,15 +81,23 @@ const EditorPage: React.FC = () => {
                     { text: editPrompt },
                 ];
                 
-                // Use new model for editing
+                // Preserve original aspect ratio and resolution from the source image
+                const originalAspectRatio = originalRecord.params?.aspectRatio || "1:1";
+                const originalResolution = originalRecord.params?.resolution || "1K";
+                // Map old resolution formats to new format if needed
+                const imageSize = ["1K", "2K", "4K"].includes(originalResolution) 
+                    ? originalResolution as "1K" | "2K" | "4K"
+                    : "1K";
+                
+                // Use new model for editing with proper config
                 const response = await ai.models.generateContent({
                     model: 'gemini-3-pro-image-preview',
-                    contents: { parts },
+                    contents: parts,
                     config: { 
-                        // Inherit AR from original if possible, or default
+                        responseModalities: ['Text', 'Image'],
                         imageConfig: {
-                             aspectRatio: "1:1", // Default for edit if not mapped
-                             imageSize: "1K"
+                             aspectRatio: originalAspectRatio,
+                             imageSize: imageSize
                         }
                     },
                 });

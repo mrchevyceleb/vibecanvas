@@ -6,40 +6,6 @@ import { supabase, supabaseAnonKey, supabaseUrl } from '../supabase/client';
 import { useGenerationStore } from '../store/useGenerationStore';
 import { toast } from '../components/ui/Toaster';
 
-// --- Helper function to create a placeholder image blob ---
-const createPlaceholderBlob = async (prompt: string): Promise<Blob> => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, 512, 512);
-        ctx.fillStyle = '#cccccc';
-        ctx.font = '20px sans-serif';
-        ctx.textAlign = 'center';
-        
-        const words = prompt.split(' ');
-        let line = '';
-        let y = 50;
-        for(let n = 0; n < words.length; n++) {
-            let testLine = line + words[n] + ' ';
-            let metrics = ctx.measureText(testLine);
-            let testWidth = metrics.width;
-            if (testWidth > 480 && n > 0) {
-                ctx.fillText(line, 256, y);
-                line = words[n] + ' ';
-                y += 25;
-            }
-            else {
-                line = testLine;
-            }
-        }
-        ctx.fillText(line, 256, y);
-    }
-    return new Promise(resolve => canvas.toBlob(blob => resolve(blob!), 'image/png'));
-};
-
 export const ensureApiKeySelected = async () => {
      if ((window as any).aistudio) {
          const hasKey = await (window as any).aistudio.hasSelectedApiKey();

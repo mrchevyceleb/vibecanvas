@@ -291,10 +291,64 @@ const LibraryPage: React.FC = () => {
           ) : null}
 
           {!loading && foldersInView.length === 0 && imagesInView.length === 0 && (
-            <div className="text-center py-16 text-slate-500">
-              <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12" width="24" height="24" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 8h.01" /><path d="M12.5 21h-6.5a3 3 0 0 1 -3 -3v-12a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v6.5" /><path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l3.5 3.5" /><path d="M14 14l1 -1c.67 -.644 1.45 -.824 2.182 -.54" /><path d="M19 19m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M17 21l4 -4" /></svg>
-              <p className="mt-4">{currentFolderId ? "This folder is empty." : `Your ${viewMode} library is empty.`}</p>
-              <p className="text-sm text-slate-600">Generated or uploaded {viewMode}s will appear here.</p>
+            <div className="text-center py-20">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-800/80 border border-slate-700/50 mb-6">
+                {viewMode === 'video' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-purple-400" width="24" height="24" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 10l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -1.447 .894l-4.553 -2.276v-4z" /><rect x="3" y="6" width="12" height="12" rx="2" /></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-neon-cyan" width="24" height="24" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 8h.01" /><path d="M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12z" /><path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5" /><path d="M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3" /></svg>
+                )}
+              </div>
+              
+              {searchTerm ? (
+                <>
+                  <h3 className="text-xl font-semibold text-slate-300 mb-2">No results found</h3>
+                  <p className="text-slate-500 mb-6">No {viewMode}s match "{searchTerm}"</p>
+                  <button 
+                    onClick={() => setSearchTerm('')}
+                    className="px-4 py-2 bg-slate-700/50 rounded-lg hover:bg-slate-700/80 transition-colors text-sm"
+                  >
+                    Clear search
+                  </button>
+                </>
+              ) : currentFolderId ? (
+                <>
+                  <h3 className="text-xl font-semibold text-slate-300 mb-2">This folder is empty</h3>
+                  <p className="text-slate-500 mb-6">Drag and drop {viewMode}s here to organize them</p>
+                  <button 
+                    onClick={() => setCurrentFolderId(null)}
+                    className="px-4 py-2 bg-slate-700/50 rounded-lg hover:bg-slate-700/80 transition-colors text-sm"
+                  >
+                    ← Back to Library
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-xl font-semibold text-slate-300 mb-2">
+                    {viewMode === 'video' ? 'No videos yet' : 'No images yet'}
+                  </h3>
+                  <p className="text-slate-500 mb-6 max-w-md mx-auto">
+                    {viewMode === 'video' 
+                      ? 'Generate videos with Veo 3.1 or Sora 2, or upload your own videos to get started.'
+                      : 'Generate images with Nano Banana Pro or GPT-Image-1, or upload your own images to get started.'
+                    }
+                  </p>
+                  <div className="flex items-center justify-center gap-3">
+                    <button 
+                      onClick={() => navigate(viewMode === 'video' ? '/video' : '/')}
+                      className="px-5 py-2.5 bg-gradient-to-r from-neon-cyan to-blue-500 text-charcoal font-bold rounded-lg hover:opacity-90 transition-opacity text-sm"
+                    >
+                      ✨ Generate {viewMode === 'video' ? 'Video' : 'Image'}
+                    </button>
+                    <button 
+                      onClick={handleUploadClick}
+                      className="px-5 py-2.5 bg-slate-700/50 rounded-lg hover:bg-slate-700/80 transition-colors text-sm flex items-center gap-2"
+                    >
+                      <UploadIcon /> Upload
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
