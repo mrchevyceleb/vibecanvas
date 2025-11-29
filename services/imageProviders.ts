@@ -76,7 +76,8 @@ const geminiProImageProvider: ImageProvider = {
             // If process.env.API_KEY is still missing here in a non-AI Studio env, it will fail below.
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
             
-            const parts: any[] = [];
+            // Build contents - either just prompt or image + prompt for img2img
+            let contents: any[] = [];
             
             // Add user-provided init image first, if it exists
             if (params.initImageStoragePath) {
@@ -85,7 +86,7 @@ const geminiProImageProvider: ImageProvider = {
                     throw new Error('Initial image not found in storage.');
                 }
                 const base64Data = await blobToBase64(imageBlob);
-                parts.push({
+                contents.push({
                     inlineData: {
                         data: base64Data,
                         mimeType: imageBlob.type || 'image/png',
@@ -97,19 +98,24 @@ const geminiProImageProvider: ImageProvider = {
             if (params.resolution === "2K" || params.resolution === "1536") imageSize = "2K";
             if (params.resolution === "4K" || params.resolution === "2048") imageSize = "4K";
             
-            // Gemini 3 Pro supports all defined aspect ratios natively
-            const supportedAspectRatio = params.aspectRatio;
+            const aspectRatio = params.aspectRatio;
 
-            // Append aspect ratio to prompt to ensure it is respected (Workaround for API consistency)
-            parts.push({ text: `${params.prompt} (Aspect Ratio: ${supportedAspectRatio})` });
+            // WORKAROUND: Append aspect ratio to end of prompt (user-tested fix)
+            const finalPrompt = `${params.prompt} ${aspectRatio}`;
+            
+            contents.push({ text: finalPrompt });
+
+            console.log('[Gemini 3 Pro] Final prompt:', finalPrompt);
 
             try {
+                // Call API using exact structure from Gemini JavaScript documentation
                 const response = await ai.models.generateContent({
                     model: 'gemini-3-pro-image-preview',
-                    contents: { parts: parts },
+                    contents: contents,
                     config: {
+                        responseModalities: ['Text', 'Image'],
                         imageConfig: {
-                            aspectRatio: supportedAspectRatio as any,
+                            aspectRatio: aspectRatio,
                             imageSize: imageSize,
                         },
                     },

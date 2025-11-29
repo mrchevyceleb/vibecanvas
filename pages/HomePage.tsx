@@ -167,25 +167,19 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
     const generateWithProvider = async (provider: ImageProvider, params: GenParams) => {
         // Adjust params for models that might need mapping if in Compare Mode
         // e.g. If user set Sora Size 1280x720 (16:9), Veo needs 16:9 aspect ratio.
-        // e.g. If user set Veo AR 16:9, Sora needs a default size (1280x720).
-        // This is a simple best-effort mapping for the "Compare" feature.
+        // This is ONLY for cross-generating in Compare mode, not normal generation.
         const effectiveParams = { ...params };
         
-        // Mapping logic if we are cross-generating
+        // Only apply Sora-specific mapping when generating WITH Sora
         if (provider.id === 'sora-2-video' && !effectiveParams.soraSize) {
-             // Map AR to Sora Size
+             // Map AR to Sora Size for Sora provider
              if (effectiveParams.aspectRatio === '9:16') effectiveParams.soraSize = '720x1280';
              else if (effectiveParams.aspectRatio === '16:9') effectiveParams.soraSize = '1280x720';
              else effectiveParams.soraSize = '1280x720'; // Default
              effectiveParams.seconds = '4'; // Default duration
-        } else if (provider.id !== 'sora-2-video' && effectiveParams.soraSize) {
-             // Map Sora Size to AR
-             if (effectiveParams.soraSize.startsWith('720') || effectiveParams.soraSize.startsWith('1024')) {
-                 effectiveParams.aspectRatio = '9:16';
-             } else {
-                 effectiveParams.aspectRatio = '16:9';
-             }
         }
+        // NOTE: Removed the reverse mapping that was overriding aspectRatio for non-Sora providers
+        // This was causing the bug where Gemini always got 16:9 regardless of user selection
 
         const result = await provider.generate(effectiveParams);
         
