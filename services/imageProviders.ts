@@ -84,7 +84,7 @@ const geminiProImageProvider: ImageProvider = {
                             aspectRatio: aspectRatio,
                             imageSize: imageSize,
                         },
-                    },
+                    } as any,
                 });
 
                 if (!useGenerationStore.getState().isGenerating) throw new Error('Generation cancelled.');

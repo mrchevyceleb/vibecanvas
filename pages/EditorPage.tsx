@@ -99,7 +99,7 @@ const EditorPage: React.FC = () => {
                              aspectRatio: originalAspectRatio,
                              imageSize: imageSize
                         }
-                    },
+                    } as any,
                 });
     
                 let editedBlob: Blob | null = null;

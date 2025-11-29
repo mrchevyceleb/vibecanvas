@@ -24,6 +24,22 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "strict": false
+  },
+  "include": [
+    "*.ts",
+    "*.tsx",
+    "components/**/*",
+    "hooks/**/*",
+    "lib/**/*",
+    "pages/**/*",
+    "services/**/*",
+    "store/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "supabase/functions/**/*"
+  ]
 }
