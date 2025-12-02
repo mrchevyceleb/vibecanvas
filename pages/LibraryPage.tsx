@@ -6,11 +6,11 @@ import { useImageLoader } from '../hooks/useImageLoader';
 import { ImageRecord, Folder, ModelId } from '../types';
 import { MODEL_DETAILS } from '../constants';
 import { Lightbox } from '../components/Lightbox';
-import { EditIcon, DeleteIcon, LinkIcon, FolderIcon, CheckIcon, UploadIcon, RemixIcon, StarIcon } from '../components/ui/Icons';
+import { EditIcon, DeleteIcon, LinkIcon, FolderIcon, CheckIcon, UploadIcon, RemixIcon, StarIcon, DownloadIcon } from '../components/ui/Icons';
 import { useAuth } from '../hooks/useAuth';
 import { toast } from '../components/ui/Toaster';
 import { supabase } from '../supabase/client';
-import { cn } from '../lib/utils';
+import { cn, downloadImage } from '../lib/utils';
 import { RemixTypeModal } from '../components/RemixTypeModal';
 
 const LibraryPage: React.FC = () => {
@@ -267,7 +267,7 @@ const LibraryPage: React.FC = () => {
           {loading && <div className="text-center py-16">Loading library...</div>}
 
           {!loading && (foldersInView.length > 0 || imagesInView.length > 0) ? (
-              <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {foldersInView.map(folder => (
                 <FolderCard 
                   key={folder.id}
@@ -285,6 +285,8 @@ const LibraryPage: React.FC = () => {
                   isSelected={selectedIds.has(record.id)}
                   onToggleSelection={handleToggleSelection}
                   onToggleStar={() => toggleStar(record.id)}
+                  folders={folders}
+                  onMoveToFolder={(folderId) => moveImage(record.id, folderId)}
                 />
               ))}
             </div>
@@ -381,7 +383,7 @@ const FolderCard: React.FC<{folder: Folder; onSelect: () => void}> = ({ folder, 
     
     return (
         <div 
-            className={`mb-4 break-inside-avoid p-4 rounded-2xl bg-slate-800/50 cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-slate-700/60 ${isDragOver ? 'ring-2 ring-neon-cyan' : ''}`}
+            className={`p-4 rounded-2xl bg-slate-800/50 cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-slate-700/60 ${isDragOver ? 'ring-2 ring-neon-cyan' : ''}`}
             onClick={onSelect}
             onDrop={handleDrop}
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
@@ -403,14 +405,47 @@ interface LibraryImageCardProps {
     isSelected: boolean;
     onToggleSelection: (id: string) => void;
     onToggleStar: () => void;
+    folders: Folder[];
+    onMoveToFolder: (folderId: string | null) => void;
 }
 
-const LibraryImageCard: React.FC<LibraryImageCardProps> = ({ record, onSelect, onRemix, isSelectionMode, isSelected, onToggleSelection, onToggleStar }) => {
+const LibraryImageCard: React.FC<LibraryImageCardProps> = ({ record, onSelect, onRemix, isSelectionMode, isSelected, onToggleSelection, onToggleStar, folders, onMoveToFolder }) => {
   const bucket = record.mediaType === 'video' ? 'video' : 'images';
   const { imageUrl, isLoading, error } = useImageLoader(record.storage_path, bucket);
   const { deleteImage } = useLibraryStore();
   const navigate = useNavigate();
   const isStarred = !!record.meta?.isStarred;
+  const [isFolderMenuOpen, setIsFolderMenuOpen] = useState(false);
+  const folderMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (folderMenuRef.current && !folderMenuRef.current.contains(event.target as Node)) {
+        setIsFolderMenuOpen(false);
+      }
+    };
+
+    if (isFolderMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isFolderMenuOpen]);
+
+  const handleMoveToFolder = (e: React.MouseEvent, folderId: string | null) => {
+    e.stopPropagation();
+    onMoveToFolder(folderId);
+    setIsFolderMenuOpen(false);
+    toast(`Moved to ${folderId ? folders.find(f => f.id === folderId)?.name || 'folder' : 'Library'}.`, 'success');
+  };
+
+  const handleFolderButtonClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsFolderMenuOpen(!isFolderMenuOpen);
+  };
 
   const handleClick = () => {
     if (isSelectionMode) {
@@ -456,6 +491,24 @@ const LibraryImageCard: React.FC<LibraryImageCardProps> = ({ record, onSelect, o
       toast('Could not get public link.', 'error');
     }
   };
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (error || !imageUrl) {
+      toast('Cannot download missing media.', 'error');
+      return;
+    }
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const extension = record.mediaType === 'video' ? 'mp4' : 'png';
+      downloadImage(blob, `vibecanvas-${record.id}.${extension}`);
+      toast('Downloaded.', 'success');
+    } catch (error) {
+      toast('Failed to download.', 'error');
+      console.error(error);
+    }
+  };
   
   const handleDragStart = (e: React.DragEvent) => {
     if (isSelectionMode || error) {
@@ -468,7 +521,7 @@ const LibraryImageCard: React.FC<LibraryImageCardProps> = ({ record, onSelect, o
   return (
     <div 
         className={cn(
-            "mb-4 break-inside-avoid relative group overflow-hidden rounded-2xl bg-slate-800/50 transition-transform duration-300",
+            "relative group overflow-hidden rounded-2xl bg-slate-800/50 transition-transform duration-300",
             !isSelectionMode && !error && "cursor-pointer hover:scale-105",
             isSelectionMode && "cursor-pointer",
             isSelected && "ring-2 ring-offset-2 ring-offset-charcoal ring-neon-cyan scale-105",
@@ -539,6 +592,50 @@ const LibraryImageCard: React.FC<LibraryImageCardProps> = ({ record, onSelect, o
                         <button onClick={handleCopyLink} title="Copy public link" className="p-2 rounded-full bg-green-500/80 hover:bg-green-500 transition-colors">
                             <LinkIcon />
                         </button>
+                        <button onClick={handleDownload} title="Download" className="p-2 rounded-full bg-slate-600/80 hover:bg-slate-600 transition-colors">
+                            <DownloadIcon />
+                        </button>
+                        <div className="relative" ref={folderMenuRef}>
+                            <button 
+                                onClick={handleFolderButtonClick} 
+                                title="Move to folder" 
+                                className="p-2 rounded-full bg-orange-500/80 hover:bg-orange-500 transition-colors"
+                            >
+                                <FolderIcon />
+                            </button>
+                            {isFolderMenuOpen && (
+                                <div className="absolute bottom-full right-0 mb-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                                    <button
+                                        onClick={(e) => handleMoveToFolder(e, null)}
+                                        className={cn(
+                                            "w-full text-left px-4 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-2",
+                                            !record.folder_id && "bg-slate-700/50"
+                                        )}
+                                    >
+                                        <FolderIcon />
+                                        <span>Library</span>
+                                    </button>
+                                    {folders.map(folder => (
+                                        <button
+                                            key={folder.id}
+                                            onClick={(e) => handleMoveToFolder(e, folder.id)}
+                                            className={cn(
+                                                "w-full text-left px-4 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-2",
+                                                record.folder_id === folder.id && "bg-slate-700/50"
+                                            )}
+                                        >
+                                            <FolderIcon />
+                                            <span className="truncate">{folder.name}</span>
+                                        </button>
+                                    ))}
+                                    {folders.length === 0 && (
+                                        <div className="px-4 py-2 text-sm text-slate-400">
+                                            No folders yet
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                         {record.mediaType !== 'video' && (
                             <button onClick={handleEdit} title="Edit" className="p-2 rounded-full bg-blue-500/80 hover:bg-blue-500 transition-colors">
                                 <EditIcon />

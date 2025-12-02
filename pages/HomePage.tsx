@@ -936,6 +936,24 @@ const GalleryItem: React.FC<{ record: ImageRecord, onClick: () => void, onRemix:
         }
     };
 
+    const handleDownload = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (error || !imageUrl) {
+            toast('Cannot download missing media.', 'error');
+            return;
+        }
+        try {
+            const response = await fetch(imageUrl);
+            const blob = await response.blob();
+            const extension = record.mediaType === 'video' ? 'mp4' : 'png';
+            downloadImage(blob, `vibecanvas-${record.id}.${extension}`);
+            toast('Downloaded.', 'success');
+        } catch (error) {
+            toast('Failed to download.', 'error');
+            console.error(error);
+        }
+    };
+
     if (isLoading) return <div className="aspect-square bg-slate-800/50 rounded-xl animate-pulse"></div>;
     if (error || !imageUrl) return null;
 
@@ -990,6 +1008,13 @@ const GalleryItem: React.FC<{ record: ImageRecord, onClick: () => void, onRemix:
                             title="Copy Link"
                         >
                             <LinkIcon />
+                        </button>
+                        <button 
+                            onClick={handleDownload} 
+                            className="p-1.5 bg-slate-700/80 text-white rounded-full hover:bg-slate-600 transition-colors border border-white/10"
+                            title="Download"
+                        >
+                            <DownloadIcon />
                         </button>
                         <button 
                             onClick={handleDelete} 
