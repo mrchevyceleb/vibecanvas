@@ -32,14 +32,14 @@ export const MODEL_DETAILS: Record<ModelId, {
         supportedAspectRatios: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
         supportedResolutions: ["1K", "2K", "4K"]
     },
-    'openai-latest-image': { 
-        name: 'GPT-Image-1', 
-        badge: 'OpenAI', 
-        badgeColor: 'bg-green-500', 
+    'openai-latest-image': {
+        name: 'GPT-Image-1.5',
+        badge: 'OpenAI',
+        badgeColor: 'bg-green-500',
         type: 'image',
         // OpenAI defaults
         supportedAspectRatios: ["1:1", "16:9", "9:16"], // Approximate
-        supportedResolutions: ["1024"] 
+        supportedResolutions: ["1024"]
     },
     'veo-3.1-generate-preview': {
         name: 'Veo 3.1',

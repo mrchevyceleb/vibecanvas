@@ -1,4 +1,4 @@
-// Supabase Edge Function for OpenAI GPT-Image-1
+// Supabase Edge Function for OpenAI GPT-Image-1.5
 // Deploy with: supabase functions deploy open-ai-image --no-verify-jwt
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -44,7 +44,7 @@ serve(async (req: Request) => {
         size = "1024x1536";
     }
 
-    console.log(`[GPT-Image-1] Generating image. Prompt: "${prompt.substring(0, 50)}...", Size: ${size}`);
+    console.log(`[GPT-Image-1.5] Generating image. Prompt: "${prompt.substring(0, 50)}...", Size: ${size}`);
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
@@ -53,7 +53,7 @@ serve(async (req: Request) => {
             "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-            model: "gpt-image-1",
+            model: "gpt-image-1.5",
             prompt: prompt,
             n: 1,
             size: size,
@@ -64,14 +64,14 @@ serve(async (req: Request) => {
 
     if (!response.ok) {
         const errorData = await response.json();
-        console.error("[GPT-Image-1] API Error:", errorData);
+        console.error("[GPT-Image-1.5] API Error:", errorData);
         throw new Error(errorData.error?.message || `OpenAI API Error: ${response.statusText}`);
     }
 
     const data = await response.json();
     
-    // gpt-image-1 returns "data": [{ "b64_json": "..." }] usually, or url if specified?
-    // Docs say: "This parameter isn't supported for gpt-image-1 which will always return base64-encoded images."
+    // gpt-image-1.5 returns "data": [{ "b64_json": "..." }] usually, or url if specified?
+    // Docs say: "This parameter isn't supported for gpt-image-1.5 which will always return base64-encoded images."
     // So we expect b64_json.
 
     const image = data.data[0];
@@ -89,7 +89,7 @@ serve(async (req: Request) => {
     );
 
   } catch (error: any) {
-    console.error("[GPT-Image-1] Error:", error);
+    console.error("[GPT-Image-1.5] Error:", error);
     
     return new Response(
       JSON.stringify({
