@@ -32,21 +32,27 @@ export const ModelSelectorPopup: React.FC<ModelSelectorPopupProps> = ({
 
     // Close on click outside
     useEffect(() => {
+        if (!isOpen) return;
+
         const handleClickOutside = (e: MouseEvent) => {
-            if (
-                popupRef.current &&
-                !popupRef.current.contains(e.target as Node) &&
-                anchorRef?.current &&
-                !anchorRef.current.contains(e.target as Node)
-            ) {
+            const target = e.target as Node;
+            const isInsidePopup = popupRef.current?.contains(target);
+            const isInsideAnchor = anchorRef?.current?.contains(target);
+
+            if (!isInsidePopup && !isInsideAnchor) {
                 onClose();
             }
         };
 
-        if (isOpen) {
+        // Use requestAnimationFrame to ensure we don't catch the click that opened the popup
+        const rafId = requestAnimationFrame(() => {
             document.addEventListener('mousedown', handleClickOutside);
-            return () => document.removeEventListener('mousedown', handleClickOutside);
-        }
+        });
+
+        return () => {
+            cancelAnimationFrame(rafId);
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
     }, [isOpen, onClose, anchorRef]);
 
     // Close on escape
@@ -73,6 +79,8 @@ export const ModelSelectorPopup: React.FC<ModelSelectorPopupProps> = ({
     return (
         <div
             ref={popupRef}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="absolute bottom-full mb-2 right-0 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl shadow-black/50 p-4 min-w-[280px] animate-fade-in-up z-50"
         >
             <div className="flex items-center justify-between mb-3">
@@ -92,7 +100,12 @@ export const ModelSelectorPopup: React.FC<ModelSelectorPopupProps> = ({
                     return (
                         <button
                             key={modelId}
-                            onClick={() => onToggleModel(modelId as ModelId)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                onToggleModel(modelId as ModelId);
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
                             className={cn(
                                 "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left",
                                 isSelected
@@ -126,13 +139,15 @@ export const ModelSelectorPopup: React.FC<ModelSelectorPopupProps> = ({
 
             <div className="flex gap-2">
                 <button
-                    onClick={onClose}
+                    onClick={(e) => { e.stopPropagation(); onClose(); }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     className="flex-1 px-4 py-2.5 text-sm text-slate-400 hover:text-white bg-slate-700/50 hover:bg-slate-700 rounded-xl transition-colors"
                 >
                     Cancel
                 </button>
                 <button
-                    onClick={handleGenerate}
+                    onClick={(e) => { e.stopPropagation(); handleGenerate(); }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     disabled={selectedModels.length === 0}
                     className={cn(
                         "flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl transition-all",
