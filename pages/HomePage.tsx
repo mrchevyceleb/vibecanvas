@@ -13,6 +13,8 @@ import { ASPECT_RATIOS, RESOLUTIONS, RESOLUTION_LABELS, MODEL_DETAILS } from '..
 import { useAuth } from '../hooks/useAuth';
 import { UploadZone } from '../components/UploadZone';
 import { SettingsIcon, UploadIcon, CloseIcon, DownloadIcon, EditIcon, RemixIcon, LinkIcon, DeleteIcon, CompareIcon, StarIcon } from '../components/ui/Icons';
+import { ModelSelectorPopup } from '../components/ModelSelectorPopup';
+import { ModelId } from '../types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { downloadImage, cn } from '../lib/utils';
 import { supabase } from '../supabase/client';
@@ -35,6 +37,10 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
     // UI State
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [isCompareMode, setIsCompareMode] = useState(false);
+    const [showComparePopup, setShowComparePopup] = useState(false);
+    const [selectedCompareModels, setSelectedCompareModels] = useState<ModelId[]>([]);
+    const compareButtonRef = useRef<HTMLButtonElement>(null);
+    const compareButtonMobileRef = useRef<HTMLButtonElement>(null);
 
     const { 
         modelId, aspectRatio, resolution, soraSeconds, soraSize,
@@ -163,6 +169,23 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
         setRemixVideoId(undefined);
     };
 
+    const handleToggleCompareModel = (modelIdToToggle: ModelId) => {
+        setSelectedCompareModels(prev => {
+            if (prev.includes(modelIdToToggle)) {
+                return prev.filter(id => id !== modelIdToToggle);
+            }
+            return [...prev, modelIdToToggle];
+        });
+    };
+
+    const handleCompareGenerate = () => {
+        if (selectedCompareModels.length > 0) {
+            setIsCompareMode(true);
+            // Generation will be triggered after popup closes
+            setTimeout(() => handleGenerate(), 100);
+        }
+    };
+
     // Helper to generate a single request
     const generateWithProvider = async (provider: ImageProvider, params: GenParams) => {
         // Adjust params for models that might need mapping if in Compare Mode
@@ -213,12 +236,11 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
         try {
             let providersToRun: ImageProvider[] = [];
 
-            if (isCompareMode) {
-                // Find all providers for the current mode
-                providersToRun = Object.values(imageProviders).filter(p => {
-                    const type = MODEL_DETAILS[p.id]?.type || 'image';
-                    return type === mode;
-                });
+            if (isCompareMode && selectedCompareModels.length > 0) {
+                // Use only the models the user selected
+                providersToRun = selectedCompareModels
+                    .map(id => imageProviders[id])
+                    .filter(Boolean);
             } else {
                 providersToRun = [getProvider(modelId)];
             }
@@ -257,8 +279,10 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
 
             if (allNewRecords.length > 0) {
                 setGenerationSuccess(allNewRecords);
-                setPrompt(''); 
-                
+                setPrompt('');
+                // Reset compare mode after successful generation
+                setIsCompareMode(false);
+
                 if (failureCount > 0) {
                     toast(`Generated with some errors. (${failureCount} failed)`, 'error');
                 } else {
@@ -371,7 +395,10 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
                                          </div>
                                     )}
                                     <p className="text-slate-500 text-sm mt-2">
-                                        {isCompareMode ? `Using all ${mode} models` : `Using ${MODEL_DETAILS[modelId]?.name}`}
+                                        {isCompareMode && selectedCompareModels.length > 0
+                                            ? `Comparing: ${selectedCompareModels.map(id => MODEL_DETAILS[id]?.name).join(', ')}`
+                                            : `Using ${MODEL_DETAILS[modelId]?.name}`
+                                        }
                                     </p>
                                     {mode === 'video' && <p className="text-slate-600 text-xs mt-1">(This takes a few minutes, please wait)</p>}
                                     <button onClick={cancelGeneration} className="mt-6 text-sm text-red-400 hover:text-white underline transition-colors">
@@ -633,16 +660,35 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
                                 </>
                             )}
                             
-                            <button 
-                                onClick={() => setIsCompareMode(!isCompareMode)} 
-                                className={cn(
-                                    "p-3 rounded-xl transition-colors flex items-center justify-center ml-auto",
-                                    isCompareMode ? "text-neon-cyan bg-neon-cyan/10 ring-1 ring-neon-cyan" : "text-gray-400 hover:text-white hover:bg-white/10"
+                            <div className="relative ml-auto">
+                                <button
+                                    ref={compareButtonMobileRef}
+                                    onClick={() => setShowComparePopup(!showComparePopup)}
+                                    className={cn(
+                                        "p-3 rounded-xl transition-colors flex items-center justify-center",
+                                        showComparePopup || selectedCompareModels.length > 0
+                                            ? "text-neon-cyan bg-neon-cyan/10 ring-1 ring-neon-cyan"
+                                            : "text-gray-400 hover:text-white hover:bg-white/10"
+                                    )}
+                                    title="Compare Models"
+                                >
+                                    <CompareIcon />
+                                </button>
+                                {selectedCompareModels.length > 0 && !showComparePopup && (
+                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-neon-cyan text-charcoal text-[10px] font-bold rounded-full flex items-center justify-center">
+                                        {selectedCompareModels.length}
+                                    </span>
                                 )}
-                                title="Compare Models"
-                            >
-                                <CompareIcon />
-                            </button>
+                                <ModelSelectorPopup
+                                    isOpen={showComparePopup}
+                                    onClose={() => setShowComparePopup(false)}
+                                    mode={mode}
+                                    selectedModels={selectedCompareModels}
+                                    onToggleModel={handleToggleCompareModel}
+                                    onGenerate={handleCompareGenerate}
+                                    anchorRef={compareButtonMobileRef}
+                                />
+                            </div>
 
                             {showAdvancedButton && (
                                 <button onClick={() => setShowAdvanced(!showAdvanced)} className={`p-3 flex items-center justify-center rounded-xl transition-colors ${showAdvanced ? 'text-neon-cyan' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>
@@ -774,16 +820,35 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
                                     </>
                                 )}
 
-                                <button 
-                                    onClick={() => setIsCompareMode(!isCompareMode)} 
-                                    className={cn(
-                                        "p-2 rounded-full transition-colors",
-                                        isCompareMode ? "bg-neon-cyan text-charcoal ring-2 ring-neon-cyan/50" : "text-gray-400 hover:text-white hover:bg-white/10"
+                                <div className="relative">
+                                    <button
+                                        ref={compareButtonRef}
+                                        onClick={() => setShowComparePopup(!showComparePopup)}
+                                        className={cn(
+                                            "p-2 rounded-full transition-colors",
+                                            showComparePopup || selectedCompareModels.length > 0
+                                                ? "bg-neon-cyan text-charcoal ring-2 ring-neon-cyan/50"
+                                                : "text-gray-400 hover:text-white hover:bg-white/10"
+                                        )}
+                                        title="Compare Models"
+                                    >
+                                        <CompareIcon />
+                                    </button>
+                                    {selectedCompareModels.length > 0 && !showComparePopup && (
+                                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-neon-cyan text-charcoal text-[10px] font-bold rounded-full flex items-center justify-center">
+                                            {selectedCompareModels.length}
+                                        </span>
                                     )}
-                                    title="Compare All Models"
-                                >
-                                    <CompareIcon />
-                                </button>
+                                    <ModelSelectorPopup
+                                        isOpen={showComparePopup}
+                                        onClose={() => setShowComparePopup(false)}
+                                        mode={mode}
+                                        selectedModels={selectedCompareModels}
+                                        onToggleModel={handleToggleCompareModel}
+                                        onGenerate={handleCompareGenerate}
+                                        anchorRef={compareButtonRef}
+                                    />
+                                </div>
                                 
                                 {showAdvancedButton && (
                                     <button onClick={() => setShowAdvanced(!showAdvanced)} className={`p-2 rounded-full transition-colors ${showAdvanced ? 'bg-neon-cyan/20 text-neon-cyan' : 'text-gray-400 hover:text-white hover:bg-white/10'}`} title="Advanced Settings">
