@@ -5,11 +5,11 @@ import { ImageRecord } from '../types';
 import { useImageLoader } from '../hooks/useImageLoader';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { toast } from './ui/Toaster';
-import { downloadImage } from '../lib/utils';
+import { downloadImage, blobToBase64 } from '../lib/utils';
 import { MODEL_DETAILS } from '../constants';
-import { CloseIcon, DownloadIcon, EditIcon, DuplicateIcon, DeleteIcon, RemixIcon, StarIcon, LinkIcon } from './ui/Icons';
+import { CloseIcon, DownloadIcon, EditIcon, DuplicateIcon, DeleteIcon, RemixIcon, StarIcon, LinkIcon, RemoveBackgroundIcon } from './ui/Icons';
 import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../supabase/client';
+import { supabase, supabaseUrl } from '../supabase/client';
 
 interface LightboxProps {
   imageRecord: ImageRecord;
@@ -21,9 +21,10 @@ export const Lightbox: React.FC<LightboxProps> = ({ imageRecord, onClose }) => {
     const { imageUrl, isLoading, error } = useImageLoader(imageRecord.storage_path, bucket);
     const navigate = useNavigate();
     const { user } = useAuth();
-    const { deleteImage, duplicateImage, toggleStar } = useLibraryStore();
+    const { deleteImage, duplicateImage, toggleStar, addImage } = useLibraryStore();
     const isStarred = !!imageRecord.meta?.isStarred;
     const isVideo = imageRecord.mediaType === 'video';
+    const [isRemovingBackground, setIsRemovingBackground] = useState(false);
     
     const handleDownload = async () => {
         if (imageUrl) {
@@ -75,6 +76,74 @@ export const Lightbox: React.FC<LightboxProps> = ({ imageRecord, onClose }) => {
     
     const handleToggleStar = async () => {
         await toggleStar(imageRecord.id);
+    };
+
+    const handleRemoveBackground = async () => {
+        if (!user || !imageUrl || isRemovingBackground) return;
+
+        setIsRemovingBackground(true);
+        try {
+            // Fetch the original image
+            const response = await fetch(imageUrl);
+            const blob = await response.blob();
+            const base64Content = await blobToBase64(blob);
+
+            // Call the edge function
+            const edgeResponse = await fetch(`${supabaseUrl}/functions/v1/remove-background`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    imageBase64: base64Content,
+                    mimeType: blob.type || 'image/png',
+                }),
+            });
+
+            const result = await edgeResponse.json();
+
+            if (!result.success) {
+                toast(result.error || 'Failed to remove background', 'error');
+                return;
+            }
+
+            // Convert result base64 back to blob
+            const binaryString = atob(result.imageBase64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const resultBlob = new Blob([bytes], { type: 'image/png' });
+
+            // Save the new image
+            const newRecord = await addImage(
+                {
+                    model: imageRecord.model,
+                    params: imageRecord.params,
+                    promptTextAtGen: `${imageRecord.promptTextAtGen} (background removed)`,
+                    sourceType: 'edit',
+                    meta: {
+                        parentId: imageRecord.id,
+                        operation: 'background-removal',
+                    },
+                    folder_id: imageRecord.folder_id,
+                    mediaType: 'image',
+                },
+                resultBlob,
+                user.id
+            );
+
+            if (newRecord) {
+                toast('Background removed successfully!', 'success');
+                onClose();
+                navigate(`/library`);
+            }
+        } catch (err) {
+            console.error('Background removal error:', err);
+            toast('Failed to remove background', 'error');
+        } finally {
+            setIsRemovingBackground(false);
+        }
     };
 
     return (
@@ -153,6 +222,15 @@ export const Lightbox: React.FC<LightboxProps> = ({ imageRecord, onClose }) => {
                         {/* FIX: Allow remix for both types */}
                         <ActionButton onClick={handleRemixRequest} icon={<RemixIcon />} label="Remix" className={`bg-purple-500/10 hover:bg-purple-500/20 text-purple-200 ${error ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={!!error} />
                         {!isVideo && <ActionButton onClick={handleEdit} icon={<EditIcon />} label="Edit" className={error ? 'opacity-50 cursor-not-allowed' : ''} disabled={!!error}/>}
+                        {!isVideo && (
+                            <ActionButton
+                                onClick={handleRemoveBackground}
+                                icon={<RemoveBackgroundIcon />}
+                                label={isRemovingBackground ? "Processing..." : "Remove BG"}
+                                className={`bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 ${(error || isRemovingBackground) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                disabled={!!error || isRemovingBackground}
+                            />
+                        )}
                         <ActionButton onClick={handleDuplicate} icon={<DuplicateIcon />} label="Duplicate" className={error ? 'opacity-50 cursor-not-allowed' : ''} disabled={!!error}/>
                         <ActionButton onClick={handleDelete} icon={<DeleteIcon />} label="Delete" className="bg-red-800/20 hover:bg-red-500/50 text-red-300" />
                         </div>
