@@ -24,7 +24,8 @@
     "supabase:functions:deploy:gemini": "supabase functions deploy gemini-image --no-verify-jwt",
     "supabase:functions:deploy:openai": "supabase functions deploy open-ai-image --no-verify-jwt",
     "supabase:functions:deploy:veo": "supabase functions deploy veo-video --no-verify-jwt",
-    "supabase:functions:deploy:all": "npm run supabase:functions:deploy:gemini && npm run supabase:functions:deploy:openai && npm run supabase:functions:deploy:veo",
+    "supabase:functions:deploy:removebg": "supabase functions deploy remove-background --no-verify-jwt",
+    "supabase:functions:deploy:all": "npm run supabase:functions:deploy:gemini && npm run supabase:functions:deploy:openai && npm run supabase:functions:deploy:veo && npm run supabase:functions:deploy:removebg",
     "supabase:link": "supabase link --project-ref xcjqilfhlwbykckzdzry",
     "supabase:unlink": "supabase unlink"
   },
