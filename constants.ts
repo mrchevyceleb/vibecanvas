@@ -24,7 +24,7 @@ export const MODEL_DETAILS: Record<ModelId, {
     supportedAspectRatios?: AspectRatio[];
     supportedResolutions?: Resolution[];
 }> = {
-    'gemini-3-pro-image-preview': { 
+    'gemini-3.1-flash-image-preview': { 
         name: 'Nano Banana Pro', 
         badge: 'Google', 
         badgeColor: 'bg-blue-500', 
@@ -65,7 +65,7 @@ export const DEFAULT_TEMPLATES: Template[] = [
         id: 'social-media-ad',
         name: 'Social Media Ad',
         description: 'Punchy prompt for high engagement.',
-        defaultModel: 'gemini-3-pro-image-preview',
+        defaultModel: 'gemini-3.1-flash-image-preview',
         params: {
             prompt: 'Vibrant, eye-catching advertisement for a new brand of sparkling water. Tropical fruits, splashing water, energetic models, dynamic composition, high detail, 8k.',
             aspectRatio: '1:1',
@@ -78,7 +78,7 @@ export const DEFAULT_TEMPLATES: Template[] = [
         id: 'stock-photo',
         name: 'Stock Photo',
         description: 'Natural lighting for realistic scenes.',
-        defaultModel: 'gemini-3-pro-image-preview',
+        defaultModel: 'gemini-3.1-flash-image-preview',
         params: {
             prompt: 'A diverse group of colleagues collaborating in a bright, modern office space. Natural light from large windows, plants in the background, candid expressions. Photorealistic, soft focus.',
             aspectRatio: '3:2',
@@ -104,7 +104,7 @@ export const DEFAULT_TEMPLATES: Template[] = [
         id: 'product-shot',
         name: 'Product Shot',
         description: 'Studio lighting for commercial products.',
-        defaultModel: 'gemini-3-pro-image-preview',
+        defaultModel: 'gemini-3.1-flash-image-preview',
         params: {
             prompt: 'A sleek, modern wireless earbud case on a marble surface. Studio lighting, soft shadows, focused on product texture and detail, minimalist background, commercial photography.',
             aspectRatio: '1:1',
@@ -117,7 +117,7 @@ export const DEFAULT_TEMPLATES: Template[] = [
         id: 'youtube-thumbnail',
         name: 'YouTube Thumbnail',
         description: 'Bold subject, high contrast for clicks.',
-        defaultModel: 'gemini-3-pro-image-preview',
+        defaultModel: 'gemini-3.1-flash-image-preview',
         params: {
             prompt: 'Expressive portrait of a gamer reacting with shock and excitement. Neon lighting, high contrast, dramatic shadows, bokeh background with computer screens. Bold colors, designed for a clickable YouTube thumbnail.',
             aspectRatio: '16:9',

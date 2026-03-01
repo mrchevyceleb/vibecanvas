@@ -1,6 +1,6 @@
 
 export type ModelId =
-  | 'gemini-3-pro-image-preview'
+  | 'gemini-3.1-flash-image-preview'
   | 'openai-latest-image'
   | 'veo-3.1-generate-preview'
   | 'sora-2-video';

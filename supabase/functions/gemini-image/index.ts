@@ -1,4 +1,4 @@
-// Supabase Edge Function for Gemini 3 Pro Image Generation
+// Supabase Edge Function for Gemini 3.1 Flash Image Generation
 // Keeps API key secure on server-side
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -69,7 +69,7 @@ serve(async (req: Request) => {
 
     // Call Gemini API
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-image-preview",
+      model: "gemini-3.1-flash-image-preview",
       contents: contents,
       config: {
         responseModalities: ["Text", "Image"],
@@ -117,7 +117,7 @@ serve(async (req: Request) => {
       JSON.stringify({ 
         success: true, 
         images: images,
-        model: "gemini-3-pro-image-preview"
+        model: "gemini-3.1-flash-image-preview"
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
