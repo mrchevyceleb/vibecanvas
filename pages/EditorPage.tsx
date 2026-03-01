@@ -114,7 +114,7 @@ const EditorPage: React.FC = () => {
             const editedBlob = await (await fetch(dataUrl)).blob();
 
             const newRecord = await addImage({
-                model: 'gemini-3-pro-image-preview',
+                model: 'gemini-3.1-flash-image-preview',
                 params: { ...originalRecord.params, prompt: editPrompt },
                 promptTextAtGen: `Edited: ${originalRecord.promptTextAtGen}`,
                 sourceType: 'edit',

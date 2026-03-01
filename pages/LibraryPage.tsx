@@ -95,7 +95,7 @@ const LibraryPage: React.FC = () => {
             return;
         }
 
-        const model: ModelId = mediaType === 'video' ? 'veo-3.1-generate-preview' : 'gemini-3-pro-image-preview';
+        const model: ModelId = mediaType === 'video' ? 'veo-3.1-generate-preview' : 'gemini-3.1-flash-image-preview';
 
         const recordData = {
             model: model,

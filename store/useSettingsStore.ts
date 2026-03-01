@@ -19,7 +19,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      modelId: 'gemini-3-pro-image-preview',
+      modelId: 'gemini-3.1-flash-image-preview',
       aspectRatio: '1:1',
       resolution: '1024',
       soraSeconds: "4",

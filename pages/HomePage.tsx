@@ -61,7 +61,7 @@ const HomePage: React.FC<HomePageProps> = ({ mode }) => {
         if (mode === 'video' && currentModelType !== 'video') {
             setModelId('veo-3.1-generate-preview');
         } else if (mode === 'image' && currentModelType !== 'image') {
-            setModelId('gemini-3-pro-image-preview');
+            setModelId('gemini-3.1-flash-image-preview');
         }
     }, [mode, modelId, setModelId]);
     

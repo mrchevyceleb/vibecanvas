@@ -6,7 +6,7 @@ import { useGenerationStore } from '../store/useGenerationStore';
 import { toast } from '../components/ui/Toaster';
 
 const geminiProImageProvider: ImageProvider = {
-    id: 'gemini-3-pro-image-preview',
+    id: 'gemini-3.1-flash-image-preview',
     name: 'Nano Banana Pro',
     isConfigured: () => true, // Edge function handles API key
     supports: {
@@ -83,7 +83,7 @@ const geminiProImageProvider: ImageProvider = {
             for (const img of data.images) {
                 const dataUrl = `data:${img.mimeType || 'image/png'};base64,${img.b64_json}`;
                 const blob = await (await fetch(dataUrl)).blob();
-                images.push({ blob, meta: { modelUsed: 'gemini-3-pro-image-preview' } });
+                images.push({ blob, meta: { modelUsed: 'gemini-3.1-flash-image-preview' } });
             }
         }
 
@@ -351,7 +351,7 @@ const veoProvider: ImageProvider = {
 
 // --- Provider Registry ---
 export const imageProviders: Record<ModelId, ImageProvider> = {
-    'gemini-3-pro-image-preview': geminiProImageProvider,
+    'gemini-3.1-flash-image-preview': geminiProImageProvider,
     'openai-latest-image': openaiProvider,
     'veo-3.1-generate-preview': veoProvider,
     'sora-2-video': soraProvider,
