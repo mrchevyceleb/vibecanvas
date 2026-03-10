@@ -186,7 +186,7 @@ const EditorPage: React.FC = () => {
                     <p className="mt-8 text-xl font-medium animate-pulse text-transparent bg-clip-text bg-gradient-to-r from-neon-cyan to-purple-400">
                         {processingStatus}
                     </p>
-                    <p className="text-slate-500 text-sm mt-2">Using Nano Banana Pro</p>
+                    <p className="text-slate-500 text-sm mt-2">Using Nano Banana 2</p>
                 </div>
             )}
 

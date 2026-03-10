@@ -332,7 +332,7 @@ const LibraryPage: React.FC = () => {
                   <p className="text-slate-500 mb-6 max-w-md mx-auto">
                     {viewMode === 'video' 
                       ? 'Generate videos with Veo 3.1 or Sora 2, or upload your own videos to get started.'
-                      : 'Generate images with Nano Banana Pro or GPT-Image-1, or upload your own images to get started.'
+                      : 'Generate images with Nano Banana 2 or GPT-Image-1, or upload your own images to get started.'
                     }
                   </p>
                   <div className="flex items-center justify-center gap-3">

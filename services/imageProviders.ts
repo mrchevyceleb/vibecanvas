@@ -7,7 +7,7 @@ import { toast } from '../components/ui/Toaster';
 
 const geminiProImageProvider: ImageProvider = {
     id: 'gemini-3.1-flash-image-preview',
-    name: 'Nano Banana Pro',
+    name: 'Nano Banana 2',
     isConfigured: () => true, // Edge function handles API key
     supports: {
         img2img: true,
@@ -18,7 +18,7 @@ const geminiProImageProvider: ImageProvider = {
     },
     async generate(params: GenParams): Promise<GenerateResult> {
         const { setGenerationStatus } = useGenerationStore.getState();
-        setGenerationStatus('Generating image with Nano Banana Pro...');
+        setGenerationStatus('Generating image with Nano Banana 2...');
 
         // Prepare init image if provided
         let initImageBase64: string | undefined;
@@ -65,7 +65,7 @@ const geminiProImageProvider: ImageProvider = {
                 }
             }
             
-            throw new Error(`Nano Banana Pro Error: ${errorMessage}`);
+            throw new Error(`Nano Banana 2 Error: ${errorMessage}`);
         }
 
         if (!data?.success) {

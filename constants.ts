@@ -25,7 +25,7 @@ export const MODEL_DETAILS: Record<ModelId, {
     supportedResolutions?: Resolution[];
 }> = {
     'gemini-3.1-flash-image-preview': { 
-        name: 'Nano Banana Pro', 
+        name: 'Nano Banana 2', 
         badge: 'Google', 
         badgeColor: 'bg-blue-500', 
         type: 'image',
