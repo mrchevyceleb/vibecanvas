@@ -110,9 +110,13 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
     reference?.path,
     reference?.bucket,
   );
-  const { isListening, isAvailable, toggleListening } = useSpeechRecognition(
-    (text) => setPrompt((prev: string) => `${prev}${prev ? " " : ""}${text}`),
-  );
+  const { isListening, isAvailable, toggleListening, stopListening } =
+    useSpeechRecognition((text) =>
+      setPrompt((prev: string) => `${prev}${prev ? " " : ""}${text}`),
+    );
+  useEffect(() => {
+    if (generation.isGenerating || !composerExpanded) stopListening();
+  }, [generation.isGenerating, composerExpanded, stopListening]);
   const params: GenParams = normalizeParams(model, {
     prompt,
     negativePrompt,
@@ -312,6 +316,7 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
     }
     const run = generation.startGeneration(ids);
     if (!run) return;
+    stopListening();
     if (mode === "image") setShowCreationControls(false);
     useGenerationStore.setState({
       retryRequest: {
@@ -486,13 +491,30 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
               <span>{prompt.length.toLocaleString()} / 10,000</span>
               {isAvailable && (
                 <button
-                  className={`quiet-button ${isListening ? "listening" : ""}`}
+                  className={`icon-button dictation-button ${isListening ? "listening" : ""}`}
                   type="button"
+                  aria-label={
+                    isListening ? "Stop dictation" : "Start dictation"
+                  }
+                  title={isListening ? "Stop dictation" : "Start dictation"}
                   aria-pressed={isListening}
                   disabled={generation.isGenerating}
                   onClick={toggleListening}
                 >
-                  {isListening ? "Stop dictation" : "Dictate"}
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="2" width="6" height="12" rx="3" />
+                    <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" />
+                  </svg>
                 </button>
               )}
             </div>
