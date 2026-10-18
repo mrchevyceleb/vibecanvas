@@ -9,6 +9,8 @@ import { MODEL_DETAILS } from "../constants";
 import { generateFal } from "../services/imageProviders";
 import { CloseIcon, StarIcon } from "./ui/Icons";
 import { copyMediaLink, downloadMedia, MediaRecoveryError } from "../lib/media";
+import { useImageEdits } from "../hooks/useImageEdits";
+import { ImageEditComposer } from "./ImageEditComposer";
 
 export const Lightbox: React.FC<{
   imageRecord: ImageRecord;
@@ -18,8 +20,11 @@ export const Lightbox: React.FC<{
     { user } = useAuth();
   const { imageRecords, deleteImage, duplicateImage, toggleStar, addImage } =
     useLibraryStore();
+  const edits = useImageEdits(imageRecord);
+  const currentRecord = edits.current!;
   const record =
-    imageRecords.find((value) => value.id === imageRecord.id) || imageRecord;
+    imageRecords.find((value) => value.id === currentRecord.id) ||
+    currentRecord;
   const isVideo = record.mediaType === "video";
   const { imageUrl, isLoading, error } = useImageLoader(
     record.storage_path,
@@ -32,7 +37,11 @@ export const Lightbox: React.FC<{
   const [recoveryUrl, setRecoveryUrl] = useState("");
   const [showDetails, setShowDetails] = useState(false);
   const blocksClose =
-    busy === "background" || busy === "duplicate" || busy === "delete";
+    edits.busy ||
+    busy === "background" ||
+    busy === "duplicate" ||
+    busy === "delete";
+  const working = !!busy || edits.busy;
   useEffect(() => {
     const element = dialog.current;
     const opener = document.activeElement as HTMLElement | null;
@@ -44,7 +53,7 @@ export const Lightbox: React.FC<{
     };
   }, []);
   const action = async (name: string, fn: () => Promise<void>) => {
-    if (busy) return;
+    if (working) return;
     setBusy(name);
     setRecoveryUrl("");
     try {
@@ -97,7 +106,7 @@ export const Lightbox: React.FC<{
       );
     result.acknowledgeSaved?.();
     toast("Background removed. Saved as a new image.");
-    onClose();
+    edits.acceptVersion(saved);
   };
   return (
     <dialog
@@ -118,7 +127,7 @@ export const Lightbox: React.FC<{
         </h2>
         <button
           className="primary-button"
-          disabled={!!busy || !!error || !imageUrl}
+          disabled={working || !!error || !imageUrl}
           onClick={() => action("download", () => downloadMedia(record))}
         >
           {busy === "download" ? "Downloading…" : "Download"}
@@ -127,7 +136,7 @@ export const Lightbox: React.FC<{
           className="secondary-button"
           aria-expanded={showDetails}
           aria-controls="lightbox-details"
-          disabled={!!busy}
+          disabled={working}
           onClick={() => setShowDetails(!showDetails)}
         >
           {showDetails ? "Hide details" : "Details & tools"}
@@ -142,19 +151,22 @@ export const Lightbox: React.FC<{
         </button>
       </div>
       <div className={`lightbox-layout ${showDetails ? "details-open" : ""}`}>
-        <div className="lightbox-media">
-          {isLoading ? (
-            <div className="spinner" />
-          ) : error ? (
-            <div role="alert">
-              <h2>Preview unavailable</h2>
-              <p>{error}</p>
-            </div>
-          ) : isVideo ? (
-            <video src={imageUrl || undefined} controls preload="metadata" />
-          ) : (
-            <img src={imageUrl || undefined} alt={record.promptTextAtGen} />
-          )}
+        <div className={`lightbox-workspace ${isVideo ? "" : "with-editor"}`}>
+          <div className="lightbox-media">
+            {isLoading ? (
+              <div className="spinner" />
+            ) : error ? (
+              <div role="alert">
+                <h2>Preview unavailable</h2>
+                <p>{error}</p>
+              </div>
+            ) : isVideo ? (
+              <video src={imageUrl || undefined} controls preload="metadata" />
+            ) : (
+              <img src={imageUrl || undefined} alt={record.promptTextAtGen} />
+            )}
+          </div>
+          {!isVideo && <ImageEditComposer edits={edits} disabled={!!busy} />}
         </div>
         <section
           id="lightbox-details"
@@ -182,7 +194,7 @@ export const Lightbox: React.FC<{
                 toast("Prompt copied.");
               })
             }
-            disabled={!!busy}
+            disabled={working}
           >
             Copy prompt
           </button>
@@ -221,7 +233,7 @@ export const Lightbox: React.FC<{
           <div className="lightbox-actions">
             <button
               className="secondary-button"
-              disabled={!!busy}
+              disabled={working}
               onClick={() => {
                 onClose();
                 navigate(isVideo ? "/video" : "/", {
@@ -233,7 +245,7 @@ export const Lightbox: React.FC<{
             </button>
             <button
               className="secondary-button"
-              disabled={!!busy}
+              disabled={working}
               onClick={() => action("favorite", () => toggleStar(record.id))}
               aria-pressed={!!record.meta?.isStarred}
             >
@@ -244,17 +256,7 @@ export const Lightbox: React.FC<{
               <>
                 <button
                   className="secondary-button"
-                  disabled={!!busy || !!error}
-                  onClick={() => {
-                    onClose();
-                    navigate(`/edit/${record.id}`);
-                  }}
-                >
-                  Edit image
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={!!busy || !!error}
+                  disabled={working || !!error}
                   onClick={() => action("background", removeBackground)}
                 >
                   Remove background
@@ -263,7 +265,7 @@ export const Lightbox: React.FC<{
             )}
             <button
               className="secondary-button"
-              disabled={!!busy || !!error}
+              disabled={working || !!error}
               onClick={() =>
                 action("duplicate", async () => {
                   if (!user) return;
@@ -278,7 +280,7 @@ export const Lightbox: React.FC<{
             </button>
             <button
               className="secondary-button"
-              disabled={!!busy || !!error}
+              disabled={working || !!error}
               onClick={() => action("link", () => copyMediaLink(record))}
             >
               Copy link (1 hour)
@@ -314,7 +316,7 @@ export const Lightbox: React.FC<{
           <div className="divider" />
           <button
             className="danger-button"
-            disabled={!!busy}
+            disabled={working}
             onClick={() => {
               if (
                 window.confirm(

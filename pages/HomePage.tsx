@@ -29,6 +29,8 @@ import { useImageLoader } from "../hooks/useImageLoader";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { CloseIcon, StarIcon } from "../components/ui/Icons";
 import { MediaRecoveryError } from "../lib/media";
+import { useImageEdits } from "../hooks/useImageEdits";
+import { ImageEditComposer } from "../components/ImageEditComposer";
 
 const videoIdeas = [
   [
@@ -79,6 +81,17 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
   const canvasRef = useRef<HTMLElement>(null);
   const settings = useSettingsStore();
   const generation = useGenerationStore();
+  const activeImageRun =
+    mode === "image" &&
+    generation.isGenerating &&
+    generation.activeModels.some((id) => getFalModel(id)?.type === "image");
+  const [showCreationControls, setShowCreationControls] = useState(
+    () =>
+      !activeImageRun &&
+      !generation.results.some((record) => record.mediaType === mode),
+  );
+  const composerExpanded = mode === "video" || showCreationControls;
+  const focusCreation = useRef(false);
   const { imageRecords, loading, fetchLibraryContent, addImage, toggleStar } =
     useLibraryStore();
   const { templates, fetchTemplates, addTemplate } = useTemplatesStore();
@@ -126,15 +139,57 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
   const canvasRecords = visibleResults.length
     ? visibleResults
     : recent.slice(0, 1);
+  useEffect(() => {
+    if (activeImageRun) setShowCreationControls(false);
+    else if (
+      mode === "image" &&
+      generation.error &&
+      generation.retryRequest?.mode === "image" &&
+      !canvasRecords.length
+    ) {
+      focusCreation.current = true;
+      setShowCreationControls(true);
+    }
+  }, [
+    activeImageRun,
+    mode,
+    generation.error,
+    generation.retryRequest?.mode,
+    canvasRecords.length,
+  ]);
   const lastResultId = useRef(visibleResults[0]?.id);
+  useEffect(() => {
+    const header = document.querySelector(".app-header");
+    if (!header) return;
+    const syncHeaderHeight = () =>
+      canvasRef.current?.style.setProperty(
+        "--studio-header-height",
+        `${header.getBoundingClientRect().height}px`,
+      );
+    syncHeaderHeight();
+    const observer = new ResizeObserver(syncHeaderHeight);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (composerExpanded && focusCreation.current) {
+      focusCreation.current = false;
+      promptRef.current?.focus();
+      promptRef.current?.scrollIntoView({ block: "center" });
+    } else if (!composerExpanded) {
+      canvasRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [composerExpanded]);
   useEffect(() => {
     const id = visibleResults[0]?.id;
     if (id && id !== lastResultId.current) {
       canvasRef.current?.scrollIntoView({
         block: "start",
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
+        behavior:
+          mode === "image" ||
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "auto"
+            : "smooth",
       });
     }
     lastResultId.current = id;
@@ -170,6 +225,8 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
   useEffect(() => {
     const record = location.state?.remixRecord as ImageRecord | undefined;
     if (!record) return;
+    focusCreation.current = true;
+    setShowCreationControls(true);
     setPrompt(
       record.sourceType === "upload"
         ? ""
@@ -255,6 +312,7 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
     }
     const run = generation.startGeneration(ids);
     if (!run) return;
+    if (mode === "image") setShowCreationControls(false);
     useGenerationStore.setState({
       retryRequest: {
         params: requestParams,
@@ -384,15 +442,22 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
       : availableDurations;
 
   return (
-    <div className="studio page-shell">
-      <div className="page-heading">
+    <div
+      className={`studio page-shell ${composerExpanded ? "" : "studio-focused"}`}
+    >
+      <div className="page-heading" hidden={!composerExpanded}>
         <div>
           <h1>{mode === "image" ? "Create an image" : "Create a video"}</h1>
           <p className="muted">Start with an idea. Make it yours.</p>
         </div>
       </div>
       <div className="studio-grid">
-        <section className="composer panel" aria-label={`Create ${mode}`}>
+        <section
+          id="creation-controls"
+          className="composer panel"
+          hidden={!composerExpanded}
+          aria-label={`Create ${mode}`}
+        >
           <label htmlFor="creation-prompt" className="field-label">
             What would you like to make?
           </label>
@@ -812,11 +877,28 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
           aria-label="Your creations"
         >
           <div className="section-top">
-            <h2>Your canvas</h2>
-            <span className="canvas-label">
-              <i />{" "}
-              {generation.isGenerating ? "Creating" : "Ready when you are"}
-            </span>
+            {composerExpanded ? <h2>Your canvas</h2> : <h1>Your image</h1>}
+            <div className="canvas-tools">
+              <span className="canvas-label">
+                <i />{" "}
+                {generation.isGenerating ? "Creating" : "Ready when you are"}
+              </span>
+              {mode === "image" &&
+                (visibleResults.length > 0 || !composerExpanded) && (
+                  <button
+                    className="secondary-button"
+                    disabled={generation.isGenerating}
+                    aria-expanded={composerExpanded}
+                    aria-controls="creation-controls"
+                    onClick={() => {
+                      focusCreation.current = !composerExpanded;
+                      setShowCreationControls(!composerExpanded);
+                    }}
+                  >
+                    {composerExpanded ? "Back to image" : "New image"}
+                  </button>
+                )}
+            </div>
           </div>
           {generation.isGenerating && (
             <div
@@ -894,8 +976,13 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
                 <ResultPreview
                   key={record.id}
                   record={record}
-                  onOpen={() => setSelectedRecord(record)}
-                  onRemix={() => {
+                  focusEdit={
+                    !composerExpanded && record.id === visibleResults[0]?.id
+                  }
+                  onOpen={setSelectedRecord}
+                  onRemix={(record) => {
+                    focusCreation.current = true;
+                    setShowCreationControls(true);
                     setReference(
                       record.mediaType === "image"
                         ? { path: record.storage_path, bucket: "images" }
@@ -1004,20 +1091,29 @@ const HomePage: React.FC<{ mode: "image" | "video" }> = ({ mode }) => {
   );
 };
 function ResultPreview({
-  record,
+  record: initialRecord,
+  focusEdit,
   onOpen,
   onRemix,
 }: {
   record: ImageRecord;
-  onOpen: () => void;
-  onRemix: () => void;
+  focusEdit: boolean;
+  onOpen: (record: ImageRecord) => void;
+  onRemix: (record: ImageRecord) => void;
 }) {
+  const edits = useImageEdits(initialRecord);
+  useEffect(() => {
+    if (focusEdit) edits.promptRef.current?.focus({ preventScroll: true });
+  }, [focusEdit]);
+  const record = edits.current!;
   const { imageUrl, error } = useImageLoader(
     record.storage_path,
     record.mediaType === "video" ? "video" : "images",
   );
   return (
-    <article className="result-preview panel">
+    <article
+      className={`result-preview panel ${record.mediaType === "image" ? "result-image-workspace" : ""}`}
+    >
       <div className="result-media">
         {error ? (
           <p role="alert">
@@ -1027,7 +1123,11 @@ function ResultPreview({
           record.mediaType === "video" ? (
             <video src={imageUrl} controls preload="metadata" />
           ) : (
-            <button onClick={onOpen} aria-label="Open full image">
+            <button
+              onClick={() => onOpen(record)}
+              disabled={edits.busy}
+              aria-label="Open full image"
+            >
               <img src={imageUrl} alt={record.promptTextAtGen} />
             </button>
           )
@@ -1035,6 +1135,7 @@ function ResultPreview({
           <div className="spinner" />
         )}
       </div>
+      {record.mediaType === "image" && <ImageEditComposer edits={edits} />}
       <div className="result-footer">
         <div>
           <strong>
@@ -1048,10 +1149,18 @@ function ResultPreview({
           </span>
         </div>
         <div>
-          <button className="quiet-button" onClick={onRemix}>
+          <button
+            className="quiet-button"
+            onClick={() => onRemix(record)}
+            disabled={edits.busy}
+          >
             Remix
           </button>
-          <button className="secondary-button" onClick={onOpen}>
+          <button
+            className="secondary-button"
+            onClick={() => onOpen(record)}
+            disabled={edits.busy}
+          >
             View full size
           </button>
         </div>
