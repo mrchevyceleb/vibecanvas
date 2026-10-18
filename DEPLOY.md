@@ -16,8 +16,7 @@
 
 | Variable | Description | Where Configured |
 |----------|-------------|------------------|
-| `GOOGLE_API_KEY` | Google AI Studio API key | Supabase Edge Function secrets |
-| `OPENAI_API_KEY` | OpenAI API key | Supabase Edge Function secrets |
+| `FAL_KEY` | fal key sourced from Doppler `FAL_API_KEY` | Supabase Edge Function secrets |
 | `SUPABASE_URL` | Supabase project URL | Supabase Edge Function (auto) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service key | Supabase Edge Function secrets |
 
@@ -140,25 +139,18 @@ supabase login
 supabase link --project-ref xcjqilfhlwbykckzdzry
 
 # Deploy all edge functions
-supabase functions deploy gemini-image    # Nano Banana Pro (image generation)
-supabase functions deploy open-ai-image   # GPT-Image-1
-supabase functions deploy veo-video       # Veo 3.1 (video generation)
-# Note: sora-video is already deployed
+npm run supabase:functions:deploy:fal
 
 # Set secrets for edge functions
-supabase secrets set GOOGLE_API_KEY=your-google-api-key
-supabase secrets set OPENAI_API_KEY=your-openai-api-key
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# Sync FAL_API_KEY from Doppler to Supabase as FAL_KEY using Assistant MCP.
+# See SUPABASE_DEPLOY.md. Supabase supplies its own auth credentials.
 ```
 
 ### Edge Function Architecture
 
 | Function | Provider | Purpose |
 |----------|----------|---------|
-| `gemini-image` | Google | Nano Banana Pro image generation & editing |
-| `open-ai-image` | OpenAI | GPT-Image-1 generation |
-| `veo-video` | Google | Veo 3.1 video generation |
-| `sora-video` | OpenAI | Sora 2 video generation |
+| `fal-media` | fal | Image/video generation, editing, background removal, queue status, cancellation |
 
 ## Troubleshooting
 
@@ -215,3 +207,11 @@ For issues, check:
 2. Cloud Build history: GCP Console > Cloud Build > History
 3. Browser developer console for frontend errors
 
+
+## Current production deployment
+
+The existing service is vibecanvas in project website-image-fetch, region europe-west1: https://vibecanvas-sn6sufxieq-ew.a.run.app. Deploy a revision with --no-traffic and a preview tag, verify it, then update traffic explicitly. The October 11, 2026 release uses revision vibecanvas-00011-huz. The shared fal catalog must remain in the Docker build context; only the edge handler is excluded.
+
+The public URL is https://canvas.stonelabs.us. Cloudflare DNS points this hostname to Vercel, whose existing `vibecanvas` project serves the routing configuration in `vercel.json`. That configuration forwards the app and its assets to the Cloud Run service above, so Cloud Run releases also appear at the public URL. Vercel serves HTTPS for the public domain; its deployment does not build or host a second copy of the app. Only changes to `vercel.json` require a Vercel deployment. Retain `public/favicon.svg` when deploying the routing configuration so the configured output directory exists.
+
+After any release, verify the public URL's JavaScript asset matches Cloud Run and check the signed-in image/video model menus at the public URL. The older Google domain mapping still exists but its HTTPS certificate has expired; do not point DNS at `ghs.googlehosted.com` without verifying certificate renewal first.

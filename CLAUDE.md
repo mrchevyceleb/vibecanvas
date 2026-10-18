@@ -15,9 +15,7 @@ npm run preview      # Preview production build on port 8080
 ```bash
 npm run supabase:start           # Start local Supabase
 npm run supabase:functions:deploy:all  # Deploy all edge functions
-npm run supabase:functions:deploy:gemini   # Deploy Gemini image function
-npm run supabase:functions:deploy:openai   # Deploy OpenAI image function
-npm run supabase:functions:deploy:veo      # Deploy Veo video function
+npm run supabase:functions:deploy:fal     # Deploy the unified fal queue proxy
 npm run supabase:link            # Link to remote project
 ```
 
@@ -36,9 +34,9 @@ VibeCanvas is a React + TypeScript AI media generation app using Vite, Tailwind 
 **AI Provider System**: `services/imageProviders.ts` contains a registry of AI providers:
 - Each provider implements `ImageProvider` interface from `types.ts`
 - Providers call Supabase Edge Functions (not direct API calls)
-- Supports: Gemini 3 Pro (image), GPT-Image-1.5 (image), Veo 3.1 (video), Sora 2 (video)
+- All active models use fal. The shared allowlist in `supabase/functions/_shared/falModels.ts` defines capabilities and payloads for eight image and six video models.
 
-**Supabase Edge Functions**: Located in `supabase/functions/` - these wrap external AI APIs (Google, OpenAI) to keep API keys server-side. Each function handles CORS and returns base64 images or video URLs.
+**Supabase Edge Functions**: `fal-media` verifies Supabase Auth and proxies fal submit/status/cancel requests. User-bound HMAC job tokens protect queue handles. `FAL_KEY` comes from Doppler workplace `personal`, project `vibecanvas`, config `prd` (`FAL_API_KEY`). The frontend never receives the key. See `SUPABASE_DEPLOY.md`.
 
 **Storage**: Two Supabase buckets:
 - `images` - for generated/uploaded images

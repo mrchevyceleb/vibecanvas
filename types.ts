@@ -1,12 +1,13 @@
-
-export type ModelId =
-  | 'gemini-3.1-flash-image-preview'
-  | 'openai-latest-image'
-  | 'veo-3.1-generate-preview'
-  | 'sora-2-video';
-
-export type AspectRatio = "1:1" | "3:2" | "2:3" | "16:9" | "9:16" | "4:5" | "5:4" | "3:4" | "4:3" | "21:9";
-export type Resolution = "512" | "768" | "1024" | "1536" | "2048" | "1K" | "2K" | "4K";
+import type {
+  ActiveModelId,
+  AspectRatio,
+  Resolution,
+} from "./supabase/functions/_shared/falModels";
+export type {
+  AspectRatio,
+  Resolution,
+} from "./supabase/functions/_shared/falModels";
+export type ModelId = ActiveModelId | "sora-2-video"; // Legacy library records remain readable.
 
 export interface GenParams {
   prompt: string;
@@ -17,6 +18,9 @@ export interface GenParams {
   steps?: number;
   seed?: number;
   initImageStoragePath?: string;
+  initImageBucket?: "images" | "video";
+  duration?: string;
+  generateAudio?: boolean;
   strength?: number;
   remixVideoId?: string;
   seconds?: "4" | "8" | "12";
@@ -54,11 +58,13 @@ export interface ImageRecord {
   meta?: Record<string, any>;
   sourceType: "generate" | "upload" | "edit";
   folder_id: string | null;
-  mediaType: 'image' | 'video';
+  mediaType: "image" | "video";
 }
 
 export interface GenerateResult {
   images: Array<{ blob: Blob; meta?: any }>;
+  params?: GenParams;
+  acknowledgeSaved?: () => void;
 }
 
 export interface ImageProvider {
@@ -72,5 +78,8 @@ export interface ImageProvider {
     steps: boolean;
     seed: boolean;
   };
-  generate(params: GenParams): Promise<GenerateResult>;
+  generate(
+    params: GenParams,
+    options?: { signal?: AbortSignal; onStatus?: (message: string) => void },
+  ): Promise<GenerateResult>;
 }

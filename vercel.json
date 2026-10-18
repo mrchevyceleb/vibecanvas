@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "",
+  "installCommand": "",
+  "outputDirectory": "public",
+  "headers": [
+    {
+      "source": "/",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "https://vibecanvas-sn6sufxieq-ew.a.run.app/"
+    },
+    {
+      "source": "/:path*",
+      "destination": "https://vibecanvas-sn6sufxieq-ew.a.run.app/:path*"
+    }
+  ]
+}

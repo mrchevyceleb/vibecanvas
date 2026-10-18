@@ -1,254 +1,336 @@
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ImageRecord } from "../types";
+import { useImageLoader } from "../hooks/useImageLoader";
+import { useLibraryStore } from "../store/useLibraryStore";
+import { useAuth } from "../hooks/useAuth";
+import { toast } from "./ui/Toaster";
+import { MODEL_DETAILS } from "../constants";
+import { generateFal } from "../services/imageProviders";
+import { CloseIcon, StarIcon } from "./ui/Icons";
+import { copyMediaLink, downloadMedia, MediaRecoveryError } from "../lib/media";
 
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ImageRecord } from '../types';
-import { useImageLoader } from '../hooks/useImageLoader';
-import { useLibraryStore } from '../store/useLibraryStore';
-import { toast } from './ui/Toaster';
-import { downloadImage, blobToBase64 } from '../lib/utils';
-import { MODEL_DETAILS } from '../constants';
-import { CloseIcon, DownloadIcon, EditIcon, DuplicateIcon, DeleteIcon, RemixIcon, StarIcon, LinkIcon, RemoveBackgroundIcon } from './ui/Icons';
-import { useAuth } from '../hooks/useAuth';
-import { supabase, supabaseUrl } from '../supabase/client';
-
-interface LightboxProps {
+export const Lightbox: React.FC<{
   imageRecord: ImageRecord;
   onClose: () => void;
-}
-
-export const Lightbox: React.FC<LightboxProps> = ({ imageRecord, onClose }) => {
-    const bucket = imageRecord.mediaType === 'video' ? 'video' : 'images';
-    const { imageUrl, isLoading, error } = useImageLoader(imageRecord.storage_path, bucket);
-    const navigate = useNavigate();
-    const { user } = useAuth();
-    const { deleteImage, duplicateImage, toggleStar, addImage } = useLibraryStore();
-    const isStarred = !!imageRecord.meta?.isStarred;
-    const isVideo = imageRecord.mediaType === 'video';
-    const [isRemovingBackground, setIsRemovingBackground] = useState(false);
-    
-    const handleDownload = async () => {
-        if (imageUrl) {
-            try {
-                const response = await fetch(imageUrl);
-                const blob = await response.blob();
-                downloadImage(blob, `vibecanvas-${imageRecord.id}.${isVideo ? 'mp4' : 'png'}`);
-                toast('Downloaded.');
-            } catch (error) {
-                toast('Failed to download.', 'error');
-                console.error(error);
-            }
-        }
+}> = ({ imageRecord, onClose }) => {
+  const navigate = useNavigate(),
+    { user } = useAuth();
+  const { imageRecords, deleteImage, duplicateImage, toggleStar, addImage } =
+    useLibraryStore();
+  const record =
+    imageRecords.find((value) => value.id === imageRecord.id) || imageRecord;
+  const isVideo = record.mediaType === "video";
+  const { imageUrl, isLoading, error } = useImageLoader(
+    record.storage_path,
+    isVideo ? "video" : "images",
+  );
+  const dialog = useRef<HTMLDialogElement>(null),
+    controller = useRef<AbortController | null>(null);
+  const [busy, setBusy] = useState<string | null>(null),
+    [status, setStatus] = useState("");
+  const [recoveryUrl, setRecoveryUrl] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
+  const blocksClose =
+    busy === "background" || busy === "duplicate" || busy === "delete";
+  useEffect(() => {
+    const element = dialog.current;
+    const opener = document.activeElement as HTMLElement | null;
+    if (element && !element.open) element.showModal();
+    return () => {
+      controller.current?.abort();
+      element?.close();
+      if (opener?.isConnected) opener.focus();
     };
-
-    const handleCopyLink = async () => {
-        const { data } = supabase.storage.from(bucket).getPublicUrl(imageRecord.storage_path);
-        if (data.publicUrl) {
-            await navigator.clipboard.writeText(data.publicUrl);
-            toast('Public link copied!', 'success');
-        } else {
-             toast('Could not get public link.', 'error');
-        }
-    };
-    
-    const handleEdit = () => {
-        navigate(`/edit/${imageRecord.id}`);
-    };
-
-    const handleRemixRequest = () => {
-        const path = isVideo ? '/video' : '/';
-        navigate(path, { state: { remixRecord: imageRecord } });
-        onClose();
-    };
-    
-    const handleDuplicate = async () => {
-        if (!user) return;
-        await duplicateImage(imageRecord.id, user.id);
-        toast('Duplicated.');
-    };
-
-    const handleDelete = async () => {
-        const itemType = isVideo ? 'video' : 'image';
-        if (window.confirm(`Are you sure you want to delete this ${itemType}?`)) {
-            await deleteImage(imageRecord.id);
-            onClose();
-        }
-    };
-    
-    const handleToggleStar = async () => {
-        await toggleStar(imageRecord.id);
-    };
-
-    const handleRemoveBackground = async () => {
-        if (!user || !imageUrl || isRemovingBackground) return;
-
-        setIsRemovingBackground(true);
-        try {
-            // Fetch the original image
-            const response = await fetch(imageUrl);
-            const blob = await response.blob();
-            const base64Content = await blobToBase64(blob);
-
-            // Call the edge function
-            const edgeResponse = await fetch(`${supabaseUrl}/functions/v1/remove-background`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    imageBase64: base64Content,
-                    mimeType: blob.type || 'image/png',
-                }),
-            });
-
-            const result = await edgeResponse.json();
-
-            if (!result.success) {
-                toast(result.error || 'Failed to remove background', 'error');
-                return;
-            }
-
-            // Convert result base64 back to blob
-            const binaryString = atob(result.imageBase64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            const resultBlob = new Blob([bytes], { type: 'image/png' });
-
-            // Save the new image
-            const newRecord = await addImage(
-                {
-                    model: imageRecord.model,
-                    params: imageRecord.params,
-                    promptTextAtGen: `${imageRecord.promptTextAtGen} (background removed)`,
-                    sourceType: 'edit',
-                    meta: {
-                        parentId: imageRecord.id,
-                        operation: 'background-removal',
-                    },
-                    folder_id: imageRecord.folder_id,
-                    mediaType: 'image',
-                },
-                resultBlob,
-                user.id
-            );
-
-            if (newRecord) {
-                toast('Background removed successfully!', 'success');
-                onClose();
-                navigate(`/library`);
-            }
-        } catch (err) {
-            console.error('Background removal error:', err);
-            toast('Failed to remove background', 'error');
-        } finally {
-            setIsRemovingBackground(false);
-        }
-    };
-
-    return (
-        <>
-            <div 
-                className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center animate-fade-in"
-                onClick={onClose}
-            >
-                <div className="w-full h-full flex flex-col lg:flex-row items-center justify-center p-4" onClick={e => e.stopPropagation()}>
-                    {/* Image/Video Display Area */}
-                    <div className="relative flex-grow w-full h-[70%] lg:h-full lg:w-[70%] flex items-center justify-center bg-black/40 rounded-lg">
-                        {isLoading && <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-neon-cyan"></div>}
-                        {error && (
-                            <div className="flex flex-col items-center text-red-400 p-4 bg-slate-900/50 rounded-lg border border-red-500/20">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                                <p className="mt-2 font-bold">Media not found</p>
-                                <p className="text-sm text-slate-400 mt-1">{error}</p>
-                            </div>
-                        )}
-                        {imageUrl && !error && (
-                            isVideo ? (
-                                <video src={imageUrl} controls autoPlay className="max-w-full max-h-full object-contain rounded-lg shadow-2xl shadow-black/50" />
-                            ) : (
-                                <img src={imageUrl} alt={imageRecord.promptTextAtGen} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl shadow-black/50"/>
-                            )
-                        )}
-                        <button onClick={onClose} className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/80 transition-colors z-10">
-                            <CloseIcon />
-                        </button>
-                    </div>
-
-                    {/* Info and Actions Panel */}
-                    <div className="flex-shrink-0 w-full lg:w-[30%] lg:max-w-md h-[30%] lg:h-full bg-slate-900/50 backdrop-blur-lg border-l border-white/10 p-6 overflow-y-auto">
-                        <h2 className="text-xl font-bold mb-4">Details</h2>
-                        <div className="space-y-4 text-sm">
-                            <div>
-                                <h3 className="font-semibold text-gray-400 mb-1">Prompt</h3>
-                                <p>{imageRecord.promptTextAtGen}</p>
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-400 mb-1">Model</h3>
-                                <p>{MODEL_DETAILS[imageRecord.model]?.name || 'Unknown'}</p>
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-400 mb-1">Parameters</h3>
-                                <p>
-                                    Ratio: {imageRecord.params.aspectRatio} | 
-                                    Resolution: {imageRecord.params.resolution}
-                                </p>
-                            </div>
-                            {imageRecord.params.negativePrompt && (
-                                <div>
-                                    <h3 className="font-semibold text-gray-400 mb-1">Negative Prompt</h3>
-                                    <p>{imageRecord.params.negativePrompt}</p>
-                                </div>
-                            )}
-                            <div>
-                                <h3 className="font-semibold text-gray-400 mb-1">Date</h3>
-                                <p>{new Date(imageRecord.createdAt).toLocaleString()}</p>
-                            </div>
-                        </div>
-
-                        <div className="border-t border-white/10 my-6"></div>
-
-                        <h2 className="text-xl font-bold mb-4">Actions</h2>
-                        <div className="grid grid-cols-2 gap-3">
-                        <ActionButton 
-                            onClick={handleToggleStar} 
-                            icon={<StarIcon filled={isStarred} />} 
-                            label={isStarred ? "Unfavorite" : "Favorite"} 
-                            className={`bg-yellow-500/10 hover:bg-yellow-500/20 ${isStarred ? 'text-yellow-300' : 'text-gray-300'}`} 
-                            disabled={!!error}
-                        />
-                        <ActionButton onClick={handleDownload} icon={<DownloadIcon />} label="Download" className={error ? 'opacity-50 cursor-not-allowed' : ''} disabled={!!error}/>
-                        <ActionButton onClick={handleCopyLink} icon={<LinkIcon />} label="Copy Link" className={error ? 'opacity-50 cursor-not-allowed' : ''} disabled={!!error}/>
-                        {/* FIX: Allow remix for both types */}
-                        <ActionButton onClick={handleRemixRequest} icon={<RemixIcon />} label="Remix" className={`bg-purple-500/10 hover:bg-purple-500/20 text-purple-200 ${error ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={!!error} />
-                        {!isVideo && <ActionButton onClick={handleEdit} icon={<EditIcon />} label="Edit" className={error ? 'opacity-50 cursor-not-allowed' : ''} disabled={!!error}/>}
-                        {!isVideo && (
-                            <ActionButton
-                                onClick={handleRemoveBackground}
-                                icon={<RemoveBackgroundIcon />}
-                                label={isRemovingBackground ? "Processing..." : "Remove BG"}
-                                className={`bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 ${(error || isRemovingBackground) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                disabled={!!error || isRemovingBackground}
-                            />
-                        )}
-                        <ActionButton onClick={handleDuplicate} icon={<DuplicateIcon />} label="Duplicate" className={error ? 'opacity-50 cursor-not-allowed' : ''} disabled={!!error}/>
-                        <ActionButton onClick={handleDelete} icon={<DeleteIcon />} label="Delete" className="bg-red-800/20 hover:bg-red-500/50 text-red-300" />
-                        </div>
-                    </div>
-                </div>
-                <style>{`.animate-fade-in { animation: fadeIn 0.2s ease-out; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
-            </div>
-        </>
+  }, []);
+  const action = async (name: string, fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(name);
+    setRecoveryUrl("");
+    try {
+      await fn();
+    } catch (err) {
+      if (err instanceof MediaRecoveryError) setRecoveryUrl(err.downloadUrl);
+      toast(
+        err instanceof Error ? err.message : "Action failed. Please try again.",
+        "error",
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+  const removeBackground = async () => {
+    if (!user) return;
+    controller.current = new AbortController();
+    const result = await generateFal(
+      record.model,
+      {
+        ...record.params,
+        prompt: "Remove background",
+        initImageStoragePath: record.storage_path,
+        initImageBucket: "images",
+      },
+      { signal: controller.current.signal, onStatus: setStatus },
+      "remove-background",
     );
-};
-
-const ActionButton: React.FC<{onClick: () => void, icon: React.ReactNode, label: string, className?: string, disabled?: boolean}> = ({onClick, icon, label, className = '', disabled}) => (
-    <button
-        onClick={onClick}
-        disabled={disabled}
-        className={`flex items-center justify-center gap-2 p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-colors ${className}`}
+    const saved = await addImage(
+      {
+        model: record.model,
+        params: record.params,
+        promptTextAtGen: `${record.promptTextAtGen} (background removed)`,
+        sourceType: "edit",
+        meta: {
+          ...result.images[0].meta,
+          parentId: record.id,
+          operation: "background-removal",
+        },
+        folder_id: record.folder_id,
+        mediaType: "image",
+      },
+      result.images[0].blob,
+      user.id,
+    );
+    if (!saved)
+      throw new MediaRecoveryError(
+        "Could not save the image. Download the original below.",
+        String(result.images[0].meta?.outputUrl || ""),
+      );
+    result.acknowledgeSaved?.();
+    toast("Background removed. Saved as a new image.");
+    onClose();
+  };
+  return (
+    <dialog
+      ref={dialog}
+      className="media-dialog"
+      aria-labelledby="media-details-title"
+      onCancel={(event) => {
+        if (blocksClose) event.preventDefault();
+        else onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !blocksClose) onClose();
+      }}
     >
-        {icon}
-        <span>{label}</span>
-    </button>
-);
+      <div className="lightbox-toolbar">
+        <h2 id="media-details-title">
+          {isVideo ? "Video preview" : "Image preview"}
+        </h2>
+        <button
+          className="primary-button"
+          disabled={!!busy || !!error || !imageUrl}
+          onClick={() => action("download", () => downloadMedia(record))}
+        >
+          {busy === "download" ? "Downloading…" : "Download"}
+        </button>
+        <button
+          className="secondary-button"
+          aria-expanded={showDetails}
+          aria-controls="lightbox-details"
+          disabled={!!busy}
+          onClick={() => setShowDetails(!showDetails)}
+        >
+          {showDetails ? "Hide details" : "Details & tools"}
+        </button>
+        <button
+          className="icon-button"
+          aria-label="Close preview"
+          onClick={onClose}
+          disabled={blocksClose}
+        >
+          <CloseIcon />
+        </button>
+      </div>
+      <div className={`lightbox-layout ${showDetails ? "details-open" : ""}`}>
+        <div className="lightbox-media">
+          {isLoading ? (
+            <div className="spinner" />
+          ) : error ? (
+            <div role="alert">
+              <h2>Preview unavailable</h2>
+              <p>{error}</p>
+            </div>
+          ) : isVideo ? (
+            <video src={imageUrl || undefined} controls preload="metadata" />
+          ) : (
+            <img src={imageUrl || undefined} alt={record.promptTextAtGen} />
+          )}
+        </div>
+        <section
+          id="lightbox-details"
+          className="lightbox-details"
+          hidden={!showDetails}
+        >
+          <div className="section-top">
+            <h2>Creation details</h2>
+          </div>
+          <span className="model-tag">
+            {record.sourceType === "upload"
+              ? "Uploaded"
+              : MODEL_DETAILS[record.model]?.name || record.model}
+          </span>
+          <p className="detail-prompt">
+            {record.promptTextAtGen || "Untitled creation"}
+          </p>
+          <button
+            className="text-link"
+            onClick={() =>
+              action("copy", async () => {
+                await navigator.clipboard.writeText(
+                  record.params?.prompt || record.promptTextAtGen,
+                );
+                toast("Prompt copied.");
+              })
+            }
+            disabled={!!busy}
+          >
+            Copy prompt
+          </button>
+          <dl className="detail-list">
+            <div>
+              <dt>Aspect ratio</dt>
+              <dd>{record.params?.aspectRatio || "—"}</dd>
+            </div>
+            <div>
+              <dt>Resolution</dt>
+              <dd>{record.params?.resolution || "—"}</dd>
+            </div>
+            {record.params?.duration && (
+              <div>
+                <dt>Duration</dt>
+                <dd>{record.params.duration}s</dd>
+              </div>
+            )}
+            <div>
+              <dt>Created</dt>
+              <dd>
+                {new Date(record.createdAt).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </dd>
+            </div>
+            {record.meta?.seed !== undefined && (
+              <div>
+                <dt>Seed</dt>
+                <dd>{record.meta.seed}</dd>
+              </div>
+            )}
+          </dl>
+          <div className="lightbox-actions">
+            <button
+              className="secondary-button"
+              disabled={!!busy}
+              onClick={() => {
+                onClose();
+                navigate(isVideo ? "/video" : "/", {
+                  state: { remixRecord: record },
+                });
+              }}
+            >
+              Remix
+            </button>
+            <button
+              className="secondary-button"
+              disabled={!!busy}
+              onClick={() => action("favorite", () => toggleStar(record.id))}
+              aria-pressed={!!record.meta?.isStarred}
+            >
+              <StarIcon filled={!!record.meta?.isStarred} />
+              {record.meta?.isStarred ? "Favorited" : "Favorite"}
+            </button>
+            {!isVideo && (
+              <>
+                <button
+                  className="secondary-button"
+                  disabled={!!busy || !!error}
+                  onClick={() => {
+                    onClose();
+                    navigate(`/edit/${record.id}`);
+                  }}
+                >
+                  Edit image
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={!!busy || !!error}
+                  onClick={() => action("background", removeBackground)}
+                >
+                  Remove background
+                </button>
+              </>
+            )}
+            <button
+              className="secondary-button"
+              disabled={!!busy || !!error}
+              onClick={() =>
+                action("duplicate", async () => {
+                  if (!user) return;
+                  const saved = await duplicateImage(record.id, user.id);
+                  if (!saved)
+                    throw new Error("Could not duplicate this creation.");
+                  toast("Copy saved to library.");
+                })
+              }
+            >
+              Duplicate
+            </button>
+            <button
+              className="secondary-button"
+              disabled={!!busy || !!error}
+              onClick={() => action("link", () => copyMediaLink(record))}
+            >
+              Copy link (1 hour)
+            </button>
+          </div>
+          {busy && (
+            <p className="field-hint" role="status">
+              {busy === "background"
+                ? status || "Removing background…"
+                : "Working…"}
+            </p>
+          )}
+          {recoveryUrl && (
+            <p role="alert">
+              <a
+                className="text-link"
+                href={recoveryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Download generated original ↗
+              </a>
+            </p>
+          )}
+          {busy === "background" && (
+            <button
+              className="secondary-button"
+              onClick={() => controller.current?.abort()}
+            >
+              Stop background removal
+            </button>
+          )}
+          <div className="divider" />
+          <button
+            className="danger-button"
+            disabled={!!busy}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Delete this creation from your library? This cannot be undone.",
+                )
+              )
+                void action("delete", async () => {
+                  await deleteImage(record.id);
+                  onClose();
+                });
+            }}
+          >
+            Delete creation
+          </button>
+        </section>
+      </div>
+    </dialog>
+  );
+};

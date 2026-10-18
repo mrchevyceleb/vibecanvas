@@ -27,8 +27,9 @@ npm-debug.log*
 .env.local
 .env.*.local
 
-# Supabase functions (deployed separately)
-supabase/functions/
+# The frontend imports the shared model catalog; keep it in the build context.
+# Only the Edge Function handler is deployed separately.
+supabase/functions/fal-media/
 
 # Documentation
 README.md
